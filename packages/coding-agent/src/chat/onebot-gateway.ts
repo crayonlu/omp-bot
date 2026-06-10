@@ -1,8 +1,8 @@
 /**
- * OneBot v11 WebSocket Gateway.
+ * OneBot v11 Reverse WebSocket Server.
  *
- * Connects to NapCat's reverse WebSocket endpoint, handles heartbeat,
- * parses incoming message events, and routes them to the trigger decider.
+ * NapCat connects to US (reverse WS). We receive message events and
+ * send API calls back to NapCat's HTTP API on port 3000.
  *
  * Reference: https://onebots.pages.dev/en/protocol/onebot-v11
  */
@@ -27,9 +27,6 @@ export interface OneBotMessageEvent {
 		user_id: number;
 		nickname: string;
 		card?: string;
-		sex?: string;
-		age?: number;
-		role?: string;
 	};
 	time: number;
 	self_id: number;
@@ -38,23 +35,14 @@ export interface OneBotMessageEvent {
 export type OneBotEventHandler = (event: OneBotMessageEvent) => void | Promise<void>;
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Server
 // ---------------------------------------------------------------------------
 
-const ONEBOT_WS_URL = process.env.ONEBOT_WS_URL ?? "ws://127.0.0.1:6099";
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
-const HEARTBEAT_INTERVAL_MS = 15000;
-
-// ---------------------------------------------------------------------------
-// Gateway
-// ---------------------------------------------------------------------------
+const WS_PATH = "/onebot/ws";
+const WS_PORT = parseInt(process.env.ONEBOT_WS_PORT ?? "3001", 10);
 
 export class OneBotGateway {
-	private ws: WebSocket | null = null;
-	private reconnectAttempt = 0;
-	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+	private server: ReturnType<typeof Bun.serve> | null = null;
 	private handler: OneBotEventHandler | null = null;
 	private selfId: number | null = null;
 	private connected = false;
@@ -71,54 +59,37 @@ export class OneBotGateway {
 		this.handler = handler;
 	}
 
-	async connect(): Promise<void> {
-		logger.info(`[onebot] Connecting to ${ONEBOT_WS_URL}...`);
-
-		return new Promise((resolve, reject) => {
-			try {
-				this.ws = new WebSocket(ONEBOT_WS_URL);
-
-				this.ws.onopen = () => {
-					logger.info(`[onebot] Connected`);
+	start(): void {
+		this.server = Bun.serve({
+			port: WS_PORT,
+			fetch: (req, server) => {
+				const url = new URL(req.url);
+				if (url.pathname === WS_PATH && req.headers.get("upgrade") === "websocket") {
+					if (server.upgrade(req)) return;
+					return new Response("Upgrade failed", { status: 500 });
+				}
+				if (url.pathname === "/health") {
+					return new Response(JSON.stringify({ ok: true, onebot_ws: WS_PATH }), {
+						headers: { "Content-Type": "application/json" }
+					});
+				}
+				return new Response("Not Found", { status: 404 });
+			},
+			websocket: {
+				open: (ws) => {
 					this.connected = true;
-					this.reconnectAttempt = 0;
-					this.startHeartbeat();
-					resolve();
-				};
-
-				this.ws.onmessage = (event: MessageEvent) => {
-					this.handleRawMessage(event.data);
-				};
-
-				this.ws.onclose = (event) => {
-					logger.warn(`[onebot] Disconnected (code=${event.code}, reason=${event.reason})`);
+					logger.info(`[onebot] NapCat connected`);
+				},
+				message: (ws, msg) => {
+					this.handleRawMessage(msg as string);
+				},
+				close: (ws) => {
 					this.connected = false;
-					this.stopHeartbeat();
-					this.scheduleReconnect();
-				};
-
-				this.ws.onerror = (err) => {
-					logger.error(`[onebot] WebSocket error: ${err}`);
-					// onclose will fire after this
-				};
-
-			} catch (err) {
-				reject(err);
-			}
+					logger.warn(`[onebot] NapCat disconnected`);
+				},
+			},
 		});
-	}
-
-	disconnect(): void {
-		this.connected = false;
-		this.stopHeartbeat();
-		if (this.reconnectTimer) {
-			clearTimeout(this.reconnectTimer);
-			this.reconnectTimer = null;
-		}
-		if (this.ws) {
-			this.ws.close(1000, "client disconnect");
-			this.ws = null;
-		}
+		logger.info(`[onebot] WebSocket server on ws://0.0.0.0:${WS_PORT}${WS_PATH}`);
 	}
 
 	// -----------------------------------------------------------------------
@@ -139,41 +110,5 @@ export class OneBotGateway {
 		} catch (err) {
 			logger.warn(`[onebot] Failed to parse message: ${err}`);
 		}
-	}
-
-	private startHeartbeat(): void {
-		this.heartbeatTimer = setInterval(() => {
-			if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-				this.ws.send(JSON.stringify({
-					action: "get_status",
-					echo: `hb_${Date.now()}`
-				}));
-			}
-		}, HEARTBEAT_INTERVAL_MS);
-	}
-
-	private stopHeartbeat(): void {
-		if (this.heartbeatTimer) {
-			clearInterval(this.heartbeatTimer);
-			this.heartbeatTimer = null;
-		}
-	}
-
-	private scheduleReconnect(): void {
-		const delay = Math.min(
-			RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempt),
-			RECONNECT_MAX_MS
-		);
-		this.reconnectAttempt++;
-		logger.warn(`[onebot] Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempt})`);
-
-		this.reconnectTimer = setTimeout(async () => {
-			try {
-				await this.connect();
-			} catch (err) {
-				logger.error(`[onebot] Reconnect failed: ${err}`);
-				// connect()'s onclose will trigger another reconnect
-			}
-		}, delay);
 	}
 }

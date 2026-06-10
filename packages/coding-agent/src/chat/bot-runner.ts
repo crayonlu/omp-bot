@@ -30,9 +30,9 @@ export async function runBotServer(args: Args): Promise<never> {
 	});
 	logger.info(`[bot] HTTP server on port ${port}`);
 
-	// Connect to OneBot
+	// Start OneBot WebSocket server (NapCat connects to us)
 	gateway.onMessage(handleOneBotMessage);
-	await gateway.connect();
+	gateway.start();
 
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
 
