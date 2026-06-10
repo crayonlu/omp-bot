@@ -41,8 +41,9 @@ RUN apt-get update \
         curl ca-certificates pkg-config libssl-dev unzip git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \
-    && /opt/bun/bin/bun --version
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /opt/bun/bin/bun
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bunx /opt/bun/bin/bunx
+RUN /opt/bun/bin/bun --version
 
 WORKDIR /pi
 
@@ -122,8 +123,10 @@ RUN apt-get update \
         build-essential pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \
-    && /opt/bun/bin/bun --version
+# Copy bun from oven/bun image (baseline-compatible binary)
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /opt/bun/bin/bun
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bunx /opt/bun/bin/bunx
+RUN /opt/bun/bin/bun --version
 
 # Rustup launcher only — the real toolchain is fetched lazily into RUSTUP_HOME
 # on first cargo invocation, driven by pi's `rust-toolchain.toml`. Keeps the
