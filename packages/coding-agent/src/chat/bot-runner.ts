@@ -1,6 +1,8 @@
 /**
  * Bot Runner — wires OneBot gateway, CQ parser, trigger decider,
  * message queue, and session dispatch into one pipeline.
+ *
+ * v2: self_id fallback from event when gateway not yet connected.
  */
 import { logger } from "@oh-my-pi/pi-utils";
 import type { Args } from "../cli/args";
@@ -117,7 +119,7 @@ async function processMessageQueue(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageResponse> {
-	const botSelfId = gateway.botSelfId;
+	const botSelfId = gateway.botSelfId ?? event.self_id;
 	if (!botSelfId) {
 		return { reply: null, silent: true, session_id: "", tool_calls: [], error: "bot self_id unknown" };
 	}
