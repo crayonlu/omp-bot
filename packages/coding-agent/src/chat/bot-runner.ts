@@ -13,6 +13,7 @@ import { MessageQueue } from "./message-queue";
 import { getBotSession, createBotSession, type BotSessionConfig } from "./session-manager";
 import type { ChatMessageResponse } from "./serve-cli";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import { qqSendMessage } from "./qq-tools";
 
 // ---------------------------------------------------------------------------
 // Bot Server
@@ -169,10 +170,23 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		await botSession.session.prompt(context);
 		const state = botSession.session.state;
 		const lastMsg = state.messages[state.messages.length - 1];
-
 		if (lastMsg?.role === "assistant") {
 			const assistantMsg = lastMsg as AssistantMessage;
 			const replyText = extractReplyText(assistantMsg);
+
+			// Auto-send reply to QQ
+			if (replyText) {
+				try {
+					await qqSendMessage({
+						target_type: targetType,
+						target_id: targetId,
+						content: replyText,
+					});
+				} catch (err) {
+					logger.error(`[bot] Failed to send reply: ${err}`);
+				}
+			}
+
 			return {
 				reply: replyText,
 				silent: replyText === null,
