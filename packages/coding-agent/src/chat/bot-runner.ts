@@ -13,7 +13,7 @@ import { MessageQueue } from "./message-queue";
 import { getBotSession, createBotSession, type BotSessionConfig } from "./session-manager";
 import type { ChatMessageResponse } from "./serve-cli";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { qqSendMessage } from "./qq-tools";
+import { qqSendMessage, setWsSender } from "./qq-tools";
 
 // ---------------------------------------------------------------------------
 // Bot Server
@@ -36,6 +36,9 @@ export async function runBotServer(args: Args): Promise<never> {
 	// Start OneBot WebSocket server (NapCat connects to us)
 	gateway.onMessage(handleOneBotMessage);
 	gateway.start();
+
+	// Wire WS sender so qq-tools can send API actions through the WS
+	setWsSender((data: string) => gateway.send(data));
 
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
 

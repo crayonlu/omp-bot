@@ -1,43 +1,28 @@
 /**
- * QQ tools registered as OMP custom tools.
+ * QQ tools — OneBot v11 API calls via WebSocket.
  *
- * These tools call the OneBot v11 HTTP API on the NapCat container.
- * NapCat listens on port 3000 for HTTP API calls.
+ * NapCat connects to us via reverse WebSocket. We send API calls
+ * back through the same WS connection. No HTTP API needed.
  */
 import { logger } from "@oh-my-pi/pi-utils";
 
 // ---------------------------------------------------------------------------
-// Configuration
+// WS Send helper — injected by gateway after connection
 // ---------------------------------------------------------------------------
 
-const ONEBOT_HTTP_URL = process.env.ONEBOT_HTTP_URL ?? "http://127.0.0.1:3000";
+let wsSender: ((data: string) => void) | null = null;
 
-// ---------------------------------------------------------------------------
-// API Helpers
-// ---------------------------------------------------------------------------
-
-interface OneBotApiResponse<T = unknown> {
-	status: "ok" | "failed";
-	retcode: number;
-	data: T;
-	msg?: string;
+export function setWsSender(sender: (data: string) => void): void {
+	wsSender = sender;
 }
 
-async function onebotApi<T = unknown>(
-	action: string,
-	params: Record<string, unknown> = {},
-): Promise<OneBotApiResponse<T>> {
-	const resp = await fetch(`${ONEBOT_HTTP_URL}/${action}`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(params),
-	});
-
-	if (!resp.ok) {
-		throw new Error(`OneBot API error: ${resp.status} ${resp.statusText}`);
+function sendAction(action: string, params: Record<string, unknown> = {}): void {
+	if (!wsSender) {
+		throw new Error("OneBot WebSocket not connected — cannot send action");
 	}
-
-	return resp.json() as Promise<OneBotApiResponse<T>>;
+	const msg = JSON.stringify({ action, params, echo: `omp_${Date.now()}` });
+	logger.debug(`[qq-tool] WS send: ${action}`);
+	wsSender(msg);
 }
 
 // ---------------------------------------------------------------------------
@@ -67,13 +52,10 @@ export async function qqSendMessage(params: SendMessageParams): Promise<{
 	}
 
 	logger.info(`[qq-tool] send_message: ${target_type}/${target_id} -> ${content.slice(0, 80)}`);
-	const resp = await onebotApi<{ message_id: number }>(action, apiParams);
+	sendAction(action, apiParams);
 
-	if (resp.status !== "ok") {
-		throw new Error(`Failed to send message: retcode=${resp.retcode} msg=${resp.msg}`);
-	}
-
-	return { message_id: resp.data.message_id };
+	// We don't wait for response — it comes async via WS
+	return { message_id: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -85,22 +67,10 @@ export async function qqGetMessage(message_id: number): Promise<{
 	user_id: number;
 	time: number;
 }> {
-	const resp = await onebotApi<{
-		message_id: number;
-		raw_message: string;
-		user_id: number;
-		time: number;
-	}>("get_msg", { message_id });
-
-	if (resp.status !== "ok") {
-		throw new Error(`Failed to get message: retcode=${resp.retcode}`);
-	}
-
-	return {
-		raw_message: resp.data.raw_message,
-		user_id: resp.data.user_id,
-		time: resp.data.time,
-	};
+	logger.info(`[qq-tool] get_message: ${message_id}`);
+	sendAction("get_msg", { message_id });
+	// Async — results come via WS events
+	return { raw_message: "", user_id: 0, time: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -134,29 +104,7 @@ export async function qqGetRecentHistory(params: GetHistoryParams): Promise<{
 	};
 
 	logger.info(`[qq-tool] get_history: ${target_type}/${target_id} (limit=${limit})`);
+	sendAction(action, apiParams);
 
-	const resp = await onebotApi<{
-		messages: Array<{
-			message_id: number;
-			user_id: number;
-			nickname?: string;
-			sender?: { nickname: string };
-			raw_message: string;
-			time: number;
-		}>;
-	}>(action, apiParams);
-
-	if (resp.status !== "ok") {
-		throw new Error(`Failed to get history: retcode=${resp.retcode}`);
-	}
-
-	return {
-		messages: resp.data.messages.map(m => ({
-			message_id: m.message_id,
-			user_id: m.user_id,
-			nickname: m.nickname ?? m.sender?.nickname ?? String(m.user_id),
-			raw_message: m.raw_message,
-			time: m.time,
-		})),
-	};
+	return { messages: [] };
 }

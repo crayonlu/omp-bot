@@ -43,8 +43,31 @@ const WS_PORT = parseInt(process.env.ONEBOT_WS_PORT ?? "3001", 10);
 
 export class OneBotGateway {
 	private server: ReturnType<typeof Bun.serve> | null = null;
+	private wsConnection: WebSocket | null = null;
 	private handler: OneBotEventHandler | null = null;
 	private selfId: number | null = null;
+	private connected = false;
+
+	get isConnected(): boolean {
+		return this.connected;
+	}
+
+	get botSelfId(): number | null {
+		return this.selfId;
+	}
+
+	onMessage(handler: OneBotEventHandler): void {
+		this.handler = handler;
+	}
+
+	/** Send an action (API call) to NapCat through the WS connection. */
+	send(data: string): void {
+		if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
+			this.wsConnection.send(data);
+		} else {
+			logger.warn("[onebot] Cannot send — WS not connected");
+		}
+	}
 	private connected = false;
 
 	get isConnected(): boolean {
@@ -77,6 +100,7 @@ export class OneBotGateway {
 			},
 			websocket: {
 				open: (ws) => {
+					this.wsConnection = ws;
 					this.connected = true;
 					logger.info(`[onebot] NapCat connected`);
 				},
@@ -84,6 +108,7 @@ export class OneBotGateway {
 					this.handleRawMessage(msg as string);
 				},
 				close: (ws) => {
+					this.wsConnection = null;
 					this.connected = false;
 					logger.warn(`[onebot] NapCat disconnected`);
 				},
