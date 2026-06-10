@@ -23,16 +23,18 @@
 ###############################################################################
 
 ARG BUN_VERSION=1.3.14
+ARG TARGET_VARIANT=modern
 
 ############################
 # 1) natives-builder — Rust + Bun → pi_natives.linux-<arch>.node
 ############################
 FROM rust:1.86-slim-bookworm AS natives-builder
-
 ARG BUN_VERSION
+ARG TARGET_VARIANT
 ENV BUN_INSTALL=/opt/bun \
     PATH=/opt/bun/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin \
-    CARGO_TERM_COLOR=never
+    CARGO_TERM_COLOR=never \
+    TARGET_VARIANT=${TARGET_VARIANT}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
