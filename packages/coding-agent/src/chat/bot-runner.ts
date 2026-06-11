@@ -14,10 +14,8 @@ import { shouldTrigger } from "./trigger-decider";
 import { MessageQueue } from "./message-queue";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender, setEchoRegisterer } from "./qq-tools";
-import { handleDashboardRequest, logActivity, getRecentActivity, getChannelConfigs, getSessionList } from "./dashboard-api";
+import { handleDashboardRequest, logActivity, getRecentActivity, getChannelConfigs, getSessionList, setModelChangeHandler } from "./dashboard-api";
 import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, onSessionChange, listBotSessions, type BotSessionConfig } from "./session-manager";
-
-export interface ChatMessageResponse {
 	tool_calls: string[];
 	error?: string;
 	trigger_reason?: string;
@@ -139,6 +137,20 @@ try {
 	// Wire session create/destroy → WS broadcast
 	onSessionChange((key: string, active: boolean) => {
 		broadcast({ type: "session", key, active });
+	});
+
+	// Wire model change → apply to all running sessions
+	setModelChangeHandler(async (modelId: string) => {
+		const sessions = listBotSessions();
+		for (const bs of sessions) {
+			try {
+				// The session stores model as "provider/modelId" format
+				await bs.session.setModelTemporary({ id: modelId, provider: "ppio", api: "openai-completions", baseUrl: "https://api.ppio.com/openai" } as any);
+				logger.info(`[api] Applied model ${modelId} to session ${bs.sessionKey}`);
+			} catch (err) {
+				logger.warn(`[api] Failed to apply model ${modelId} to session ${bs.sessionKey}: ${err}`);
+			}
+		}
 	});
 
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
