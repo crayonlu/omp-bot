@@ -5,7 +5,7 @@
  */
 import { $, type ServerWebSocket } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import type { Args } from "../cli/args";
 import { OneBotGateway, type OneBotMessageEvent } from "./onebot-gateway";
@@ -388,6 +388,7 @@ async function processMessageQueue(): Promise<void> {
 					});
 				} catch (err) {
 					logger.error(`[bot] Error processing message: ${err}`);
+					markCrash(err);
 				}
 			}
 		}
@@ -396,6 +397,12 @@ async function processMessageQueue(): Promise<void> {
 	}
 }
 
+
+// Crash marker — written before fatal errors so Zero can recover on next session
+const CRASH_MARKER = "/data/crash-marker.txt";
+function markCrash(err: unknown): void {
+	try { writeFileSync(CRASH_MARKER, `[${new Date().toISOString()}] ${String(err).slice(0, 500)}`, "utf-8"); } catch {}
+}
 // ---------------------------------------------------------------------------
 // Message Dispatch
 // ---------------------------------------------------------------------------
