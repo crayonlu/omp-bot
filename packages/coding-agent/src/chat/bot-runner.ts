@@ -324,6 +324,11 @@ async function handleHttpRequest(req: Request): Promise<Response> {
 	const path = url.pathname;
 	const method = req.method;
 
+	// Favicon fallback
+	if (path === "/favicon.ico" || path === "/favicon.svg") {
+		return new Response("", { status: 204 });
+	}
+
 	// New API routes (checked before dashboard so we can override /api/*)
 	const apiResp = await handleNewApiRoutes(method, path, url, req);
 	if (apiResp) return apiResp;
