@@ -446,24 +446,8 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			toolCalls.push(evt.toolName);
 		}
 	});
-
 	try {
-		await botSession.session.prompt(context);
-		const state = botSession.session.state;
-		const lastMsg = state.messages[state.messages.length - 1];
-		if (lastMsg?.role === "assistant") {
-			const assistantMsg = lastMsg as AssistantMessage;
-			const replyText = extractReplyText(assistantMsg);
 
-			// Auto-send reply to QQ
-			if (replyText) {
-				try {
-					await qqSendMessage({
-						target_type: targetType,
-						target_id: targetId,
-						content: replyText,
-					});
-	try {
 		logger.info(`[dispatch] prompt starting for ${sessionKey} (msg: ${context.slice(0, 60)}…)`);
 		await botSession.session.prompt(context);
 		logger.info(`[dispatch] prompt completed for ${sessionKey}`);
