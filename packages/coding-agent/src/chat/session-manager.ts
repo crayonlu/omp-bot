@@ -11,7 +11,8 @@ import { logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
 import type { AgentSession } from "../session/agent-session";
 import { growthTools } from "./growth-tools";
-// ---------------------------------------------------------------------------
+import { qqTools } from "./qq-tools";
+
 
 export interface BotSessionConfig {
 	targetType: "private" | "group";
@@ -75,7 +76,7 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 			enableLsp: false,
 			skipPythonPreflight: true,
 			spawns: "bash",
-			customTools: growthTools,
+			customTools: [...growthTools, ...qqTools],
 			systemPrompt: (_defaultBlocks) => {
 				const botPrompt = buildBotSessionPrompt(config);
 				return [botPrompt];
@@ -87,7 +88,6 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 			`bot:session:create:${key}`,
 			() => createAgentSession(sessionOpts),
 		);
-
 		const now = Date.now();
 		const botSession: BotSession = {
 			sessionKey: key,

@@ -146,3 +146,43 @@ export async function qqGetRecentHistory(params: GetHistoryParams): Promise<{
 		})),
 	};
 }
+
+
+import type { CustomTool } from "../extensibility/custom-tools/types";
+
+export const qqSendMessageTool: CustomTool = {
+	name: "qq_send_message",
+	label: "Send QQ Message",
+	description:
+		"Send a message to a QQ user or group. Call this to reply to 先生. " +
+		"You can call it multiple times per turn to send short bursts naturally. " +
+		"Use it before web_search to acknowledge: 「稍等，我查一下」",
+	parameters: {
+		type: "object",
+		properties: {
+			content: {
+				type: "string",
+				description: "The message text to send. Pure plain text, no markdown. Max ~4500 chars.",
+			},
+		},
+		required: ["content"],
+	},
+	async execute(
+		_toolCallId: string,
+		params: { content: string },
+		_onUpdate: any,
+		_ctx: CustomToolContext,
+	) {
+		const text = params.content;
+		if (!text?.trim()) return { content: [{ type: "text" as const, text: "no content" }], isError: true };
+		logger.info(`[qq-tool] agent called qq_send_message: ${text.slice(0, 80)}`);
+		await qqSendMessage({
+			target_type: "private",
+			target_id: 1104507145,
+			content: text,
+		});
+		return { content: [{ type: "text" as const, text: `sent: ${text.slice(0, 80)}` }] };
+	},
+};
+
+export const qqTools: CustomTool[] = [qqSendMessageTool];
