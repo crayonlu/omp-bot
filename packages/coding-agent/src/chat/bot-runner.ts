@@ -12,7 +12,7 @@ import { OneBotGateway, type OneBotMessageEvent } from "./onebot-gateway";
 import { parseMessageSegments, buildMessageContext } from "./cq-parser";
 import { shouldTrigger } from "./trigger-decider";
 import { MessageQueue } from "./message-queue";
-import { getBotSession, createBotSession, startCleanupTimer, type BotSessionConfig } from "./session-manager";
+import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, type BotSessionConfig } from "./session-manager";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender, setEchoRegisterer } from "./qq-tools";
 import {
@@ -60,8 +60,15 @@ export async function runBotServer(args: Args): Promise<never> {
 
 	// Intercept process.exit to prevent crashes and log the caller
 	(process as any).exit = function (code?: number) {
-		logger.warn(`[bot] process.exit(${code}) called — stack: ${new Error().stack?.split("\n").slice(1, 5).join(" → ")}`);
+		logger.warn(`[bot] process.exit(${code}) called — stack: ${new Error().stack?.split("\n").slice(2, 6).join(" → ")}`);
 	};
+
+	// Override OMP's SIGTERM handler — log instead of exiting
+	const sigtermHandler = () => {
+		logger.warn(`[bot] SIGTERM received — preventing OMP exit`);
+	};
+	process.removeAllListeners("SIGTERM");
+	process.on("SIGTERM", sigtermHandler);
 
 	process.on("uncaughtException", (err: Error) => {
 		try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] UNCAUGHT: ${String(err).slice(0, 500)}`, "utf-8"); } catch {}
@@ -457,8 +464,18 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	const targetId = targetType === "group" ? event.group_id! : event.user_id;
 	const sessionKey = `${targetType}:${targetId}`;
 
-	// Get or create session
+	// Get or create session (recreate if previous was disposed by shutdown)
 	let botSession = getBotSession(sessionKey);
+	if (botSession) {
+		try {
+			// Test if session is alive by checking its state
+			botSession.session.state;
+		} catch {
+			logger.warn(`[dispatch] Session ${sessionKey} was disposed — recreating`);
+			await destroyBotSession(sessionKey);
+			botSession = null;
+		}
+	}
 	if (!botSession) {
 		const config: BotSessionConfig = {
 			targetType,
@@ -467,7 +484,6 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		};
 		botSession = await createBotSession(sessionKey, config);
 	}
-
 	// Dispatch to agent
 	const toolCalls: string[] = [];
 	const unsub = botSession.session.subscribe(evt => {
