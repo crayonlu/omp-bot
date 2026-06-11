@@ -79,6 +79,11 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 			skipPythonPreflight: true,
 			spawns: "bash",
 			customTools: growthTools,
+			model: {
+				id: "deepseek/deepseek-v4-flash",
+				provider: "ppio",
+				reasoning: false,
+			},
 			systemPrompt: (_defaultBlocks) => {
 				const botPrompt = buildBotSessionPrompt(config);
 				return [botPrompt];
