@@ -157,6 +157,7 @@ export function startCleanupTimer(): void {
 // ---------------------------------------------------------------------------
 
 import { BOT_SYSTEM_PROMPT } from "./bot-prompt";
+import { getPromptOverride } from "./dashboard-api";
 
 function buildBotSessionPrompt(config: BotSessionConfig): string {
 	const targetLabel = config.targetType === "private"
@@ -170,7 +171,7 @@ function buildBotSessionPrompt(config: BotSessionConfig): string {
 		`You have access to read/write files in your workspace.`,
 		`Store user preferences in /workspace/memory.md.`,
 		`Reflect on your behavior in /workspace/self-improvement.md.`,
-	].join("\n");
-
-	return `${preamble}\n\n---\n\n${BOT_SYSTEM_PROMPT}`;
+	const override = getPromptOverride();
+	const basePrompt = override ?? BOT_SYSTEM_PROMPT;
+	return `${preamble}\n\n---\n\n${basePrompt}`;
 }
