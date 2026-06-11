@@ -7,7 +7,7 @@
 import { logger } from "@oh-my-pi/pi-utils";
 
 // ---------------------------------------------------------------------------
-// WS Send helper — injected by gateway after connection
+// WS injects — set by gateway after connection
 // ---------------------------------------------------------------------------
 
 let wsSender: ((data: string) => void) | null = null;
@@ -16,13 +16,35 @@ export function setWsSender(sender: (data: string) => void): void {
 	wsSender = sender;
 }
 
-function sendAction(action: string, params: Record<string, unknown> = {}): void {
+let echoRegisterer: ((echo: string) => Promise<unknown>) | null = null;
+
+/**
+ * Inject the echo registerer from the OneBot gateway.
+ * Call once after gateway is created.
+ */
+export function setEchoRegisterer(registerer: (echo: string) => Promise<unknown>): void {
+	echoRegisterer = registerer;
+}
+
+// ---------------------------------------------------------------------------
+// Internal: send an API action and wait for the echoed response
+// ---------------------------------------------------------------------------
+
+function sendAction(
+	action: string,
+	params: Record<string, unknown> = {},
+	echo: string,
+): Promise<Record<string, unknown>> {
 	if (!wsSender) {
 		throw new Error("OneBot WebSocket not connected — cannot send action");
 	}
-	const msg = JSON.stringify({ action, params, echo: `omp_${Date.now()}` });
-	logger.debug(`[qq-tool] WS send: ${action}`);
+	if (!echoRegisterer) {
+		throw new Error("Echo registerer not set — cannot await response");
+	}
+	const msg = JSON.stringify({ action, params, echo });
+	logger.debug(`[qq-tool] WS send: ${action} (echo=${echo})`);
 	wsSender(msg);
+	return echoRegisterer(echo) as Promise<Record<string, unknown>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,10 +74,8 @@ export async function qqSendMessage(params: SendMessageParams): Promise<{
 	}
 
 	logger.info(`[qq-tool] send_message: ${target_type}/${target_id} -> ${content.slice(0, 80)}`);
-	sendAction(action, apiParams);
-
-	// We don't wait for response — it comes async via WS
-	return { message_id: 0 };
+	const data = await sendAction(action, apiParams, `omp_send_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+	return { message_id: (data?.message_id as number) ?? 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -68,9 +88,14 @@ export async function qqGetMessage(message_id: number): Promise<{
 	time: number;
 }> {
 	logger.info(`[qq-tool] get_message: ${message_id}`);
-	sendAction("get_msg", { message_id });
-	// Async — results come via WS events
-	return { raw_message: "", user_id: 0, time: 0 };
+	const data = await sendAction("get_msg", { message_id }, `omp_getmsg_${message_id}_${Date.now()}`);
+
+	const sender = (data?.sender as Record<string, unknown> | undefined) ?? {};
+	return {
+		raw_message: ((data?.raw_message ?? data?.message) as string) ?? "",
+		user_id: (sender.user_id as number) ?? 0,
+		time: (data?.time as number) ?? 0,
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +129,20 @@ export async function qqGetRecentHistory(params: GetHistoryParams): Promise<{
 	};
 
 	logger.info(`[qq-tool] get_history: ${target_type}/${target_id} (limit=${limit})`);
-	sendAction(action, apiParams);
+	const data = await sendAction(
+		action,
+		apiParams,
+		`omp_hist_${target_type}_${target_id}_${Date.now()}`,
+	);
 
-	return { messages: [] };
+	const messages = (data?.messages as Array<Record<string, unknown>>) ?? [];
+	return {
+		messages: messages.map((msg) => ({
+			message_id: (msg.message_id as number) ?? 0,
+			user_id: (msg.user_id as number) ?? 0,
+			nickname: (msg.nickname as string) ?? "",
+			raw_message: (msg.raw_message as string) ?? "",
+			time: (msg.time as number) ?? 0,
+		})),
+	};
 }

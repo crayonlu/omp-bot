@@ -4,13 +4,14 @@
  *
  * v2: self_id fallback from event when gateway not yet connected.
  */
+import { $ } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { Args } from "../cli/args";
 import { OneBotGateway, type OneBotMessageEvent } from "./onebot-gateway";
 import { parseMessageSegments, buildMessageContext } from "./cq-parser";
 import { shouldTrigger } from "./trigger-decider";
 import { MessageQueue } from "./message-queue";
-import { getBotSession, createBotSession, type BotSessionConfig } from "./session-manager";
+import { getBotSession, createBotSession, startCleanupTimer, type BotSessionConfig } from "./session-manager";
 import type { ChatMessageResponse } from "./serve-cli";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender } from "./qq-tools";
@@ -27,12 +28,15 @@ const PORT = parseInt(process.env.OMP_SERVE_PORT ?? "3099", 10);
 export async function runBotServer(args: Args): Promise<never> {
 	const port = args.port ?? PORT;
 
+	// Enable console transport so 'docker logs' shows output
+	logger.setTransports({ console: true, file: true });
+
 	// Start HTTP server for health checks and dashboard
 	const server = Bun.serve({
 		port,
 		fetch: handleHttpRequest,
 	});
-	logger.info(`[bot] HTTP server on port ${port}`);
+	logger.info(`[bot] Bot server ready — health at port ${port}, dashboard at /`);
 
 	// Start OneBot WebSocket server (NapCat connects to us)
 	gateway.onMessage(handleOneBotMessage);
@@ -42,13 +46,38 @@ export async function runBotServer(args: Args): Promise<never> {
 	setWsSender((data: string) => gateway.send(data));
 
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
+	startCleanupTimer();
 
 	// Start processing loop
 	processMessageQueue();
 
+	// One-time: ensure at least one marketplace source is configured
+	ensureMarketplaceSource();
+
 	// Keep alive
 	await new Promise(() => {});
 }
+async function ensureMarketplaceSource(): Promise<void> {
+	const defaultSource = process.env.OMP_MARKETPLACE_SOURCE ?? "can1357/oh-my-pi";
+
+	try {
+		const result = await $`/usr/local/bin/omp plugin marketplace list`.quiet();
+		const output = result.stdout.toString().trim();
+
+		if (!output || output.includes("No marketplaces configured")) {
+			logger.info(`[bot] No marketplace sources configured. Adding default: ${defaultSource}`);
+			const addResult =
+				await $`/usr/local/bin/omp plugin marketplace add ${defaultSource}`.quiet();
+			logger.info(`[bot] Marketplace source added: ${addResult.stdout.toString().trim()}`);
+		} else {
+			logger.info(`[bot] Marketplace sources already configured, skipping default add`);
+		}
+	} catch (err: any) {
+		const message = err.stderr?.toString().trim() ?? String(err);
+		logger.info(`[bot] Failed to ensure marketplace source: ${message}`);
+	}
+}
+
 
 // ---------------------------------------------------------------------------
 // HTTP Handler

@@ -41,11 +41,18 @@ export type OneBotEventHandler = (event: OneBotMessageEvent) => void | Promise<v
 const WS_PATH = "/onebot/ws";
 const WS_PORT = parseInt(process.env.ONEBOT_WS_PORT ?? "3001", 10);
 
+/** Timeout for API call echoes (ms). */
+const ECHO_TIMEOUT_MS = 30_000;
+
 export class OneBotGateway {
-	private server: ReturnType<typeof Bun.serve> | null = null;
-	private wsConnection: WebSocket | null = null;
+	private server: Bun.Server<undefined> | null = null;
+	private wsConnection: Bun.ServerWebSocket<undefined> | null = null;
 	private handler: OneBotEventHandler | null = null;
 	private selfId: number | null = null;
+	private pendingEchoes = new Map<
+		string,
+		{ resolve: (data: unknown) => void; reject: (err: Error) => void }
+	>();
 	private connected = false;
 
 	get isConnected(): boolean {
@@ -60,26 +67,40 @@ export class OneBotGateway {
 		this.handler = handler;
 	}
 
-	/** Send an action (API call) to NapCat through the WS connection. */
+	/**
+	 * Register a pending echo for an API call.
+	 * Returns a promise that resolves when the WS response arrives,
+	 * or rejects on timeout.
+	 */
+	registerEcho(echo: string): Promise<unknown> {
+		return new Promise<unknown>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				this.pendingEchoes.delete(echo);
+				reject(new Error(`[onebot] Echo timeout: ${echo}`));
+			}, ECHO_TIMEOUT_MS);
+
+			this.pendingEchoes.set(echo, {
+				resolve: (data: unknown) => {
+					clearTimeout(timer);
+					this.pendingEchoes.delete(echo);
+					resolve(data);
+				},
+				reject: (err: Error) => {
+					clearTimeout(timer);
+					this.pendingEchoes.delete(echo);
+					reject(err);
+				},
+			});
+		});
+	}
+
+	/** Send raw data through the WS connection. */
 	send(data: string): void {
-		if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
+		if (this.wsConnection && this.wsConnection.readyState === 1) {
 			this.wsConnection.send(data);
 		} else {
 			logger.warn("[onebot] Cannot send — WS not connected");
 		}
-	}
-	private connected = false;
-
-	get isConnected(): boolean {
-		return this.connected;
-	}
-
-	get botSelfId(): number | null {
-		return this.selfId;
-	}
-
-	onMessage(handler: OneBotEventHandler): void {
-		this.handler = handler;
 	}
 
 	start(): void {
@@ -110,6 +131,7 @@ export class OneBotGateway {
 				close: (ws) => {
 					this.wsConnection = null;
 					this.connected = false;
+					this.rejectPendingEchoes();
 					logger.warn(`[onebot] NapCat disconnected`);
 				},
 			},
@@ -124,6 +146,24 @@ export class OneBotGateway {
 	private handleRawMessage(data: string): void {
 		try {
 			const msg = JSON.parse(data);
+
+			// API response: echo + status fields
+			if (msg.echo !== undefined && msg.status !== undefined) {
+				const pending = this.pendingEchoes.get(msg.echo);
+				if (pending) {
+					if (msg.status === "ok" || msg.retcode === 0) {
+						pending.resolve(msg.data);
+					} else {
+						pending.reject(
+							new Error(
+								`[onebot] API error: ${msg.status} retcode=${msg.retcode} echo=${msg.echo}`
+							)
+						);
+					}
+				}
+				return;
+			}
+
 			if (msg.post_type === "meta_event" && msg.meta_event_type === "lifecycle") {
 				this.selfId = msg.self_id;
 				logger.info(`[onebot] Lifecycle: self_id=${this.selfId}`);
@@ -135,5 +175,12 @@ export class OneBotGateway {
 		} catch (err) {
 			logger.warn(`[onebot] Failed to parse message: ${err}`);
 		}
+	}
+
+	private rejectPendingEchoes(): void {
+		for (const [echo, pending] of this.pendingEchoes) {
+			pending.reject(new Error(`[onebot] WS disconnected (echo: ${echo})`));
+		}
+		this.pendingEchoes.clear();
 	}
 }

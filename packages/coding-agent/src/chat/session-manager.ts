@@ -114,6 +114,31 @@ export async function destroyBotSession(key: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Background Cleanup
+// ---------------------------------------------------------------------------
+
+const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_MAX_IDLE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startCleanupTimer(): void {
+	if (cleanupTimer) return; // idempotent
+
+	cleanupTimer = setInterval(async () => {
+		const now = Date.now();
+		for (const [key, botSession] of sessions) {
+			if (now - botSession.lastActivity > SESSION_MAX_IDLE_MS) {
+				logger.info(`[bot-session] Cleanup: destroying idle session ${key} (last activity ${new Date(botSession.lastActivity).toISOString()})`);
+				await destroyBotSession(key);
+			}
+		}
+	}, CLEANUP_INTERVAL_MS).unref();
+
+	logger.info(`[bot-session] Cleanup timer started (every 30min, evict after 24h idle)`);
+}
+
+// ---------------------------------------------------------------------------
 // System Prompt (per-session)
 // ---------------------------------------------------------------------------
 
