@@ -5,30 +5,19 @@
  */
 import { $, type ServerWebSocket } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import type { Args } from "../cli/args";
 import { OneBotGateway, type OneBotMessageEvent } from "./onebot-gateway";
 import { parseMessageSegments, buildMessageContext } from "./cq-parser";
 import { shouldTrigger } from "./trigger-decider";
 import { MessageQueue } from "./message-queue";
-import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, type BotSessionConfig } from "./session-manager";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender, setEchoRegisterer } from "./qq-tools";
-import {
-	handleDashboardRequest,
-	logActivity,
-	getRecentActivity,
-	getPromptOverride,
-	setPromptOverride,
-	getSessionList,
-} from "./dashboard-api";
-import { onSessionChange } from "./session-manager";
+import { handleDashboardRequest, logActivity, getRecentActivity, getChannelConfigs, getSessionList } from "./dashboard-api";
+import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, onSessionChange, listBotSessions, type BotSessionConfig } from "./session-manager";
 
 export interface ChatMessageResponse {
-	reply: string | null;
-	silent: boolean;
-	session_id: string;
 	tool_calls: string[];
 	error?: string;
 	trigger_reason?: string;
@@ -55,6 +44,18 @@ export function broadcast(data: object): void {
 }
 
 
+function getLatestOverview() {
+	const activity = getRecentActivity(200);
+	const today = activity.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString());
+	return {
+		sessionCount: listBotSessions().length,
+		channelCount: getChannelConfigs().length,
+		messagesToday: today.length,
+		repliedToday: today.filter(e => e.decision === "replied").length,
+		skippedToday: today.filter(e => e.decision === "skipped").length,
+		errorsToday: today.filter(e => e.decision === "error").length,
+	};
+}
 export async function runBotServer(args: Args): Promise<never> {
 	const port = args.port ?? PORT;
 
@@ -107,6 +108,8 @@ try {
 		websocket: {
 			open(ws) {
 				wsClients.add(ws);
+				ws.send(JSON.stringify({ type: "status", connected: gateway.isConnected }));
+				ws.send(JSON.stringify({ type: "stats", overview: getLatestOverview() }));
 				logger.debug(`[ws] Client connected (${wsClients.size} total)`);
 			},
 			close(ws) {
