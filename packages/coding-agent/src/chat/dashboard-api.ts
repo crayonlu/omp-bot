@@ -5,9 +5,9 @@
  * Activity log is a simple JSONL file at /data/activity.jsonl.
  */
 import { logger } from "@oh-my-pi/pi-utils";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, readdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fetchFriends, fetchGroups } from "./qq-tools";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -273,6 +273,17 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 		// Models
 		case "GET /api/models":
 			return Response.json(getAvailableModels());
+		// Friends list
+		case "GET /api/friends": {
+			const friends = await fetchFriends();
+			return Response.json(friends);
+		}
+
+		// Groups list
+		case "GET /api/groups": {
+			const groups = await fetchGroups();
+			return Response.json(groups);
+		}
 
 		// Overview (aggregated stats)
 		case "GET /api/overview": {

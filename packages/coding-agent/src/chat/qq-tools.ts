@@ -147,6 +147,20 @@ export async function qqGetRecentHistory(params: GetHistoryParams): Promise<{
 	};
 }
 
+// ---------------------------------------------------------------------------
+// OneBot API wrappers for dashboard (friend/group lists)
+// ---------------------------------------------------------------------------
+
+export async function fetchFriends(): Promise<Array<{ user_id: number; nickname: string }>> {
+	const data = await sendAction("get_friend_list", {}, `omp_friends_${Date.now()}`);
+	return (data as any)?.friends ?? (data as any) ?? [];
+}
+
+export async function fetchGroups(): Promise<Array<{ group_id: number; group_name: string }>> {
+	const data = await sendAction("get_group_list", {}, `omp_groups_${Date.now()}`);
+	return (data as any)?.groups ?? (data as any) ?? [];
+}
+
 
 import type { CustomTool } from "../extensibility/custom-tools/types";
 
