@@ -7,13 +7,10 @@
  */
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { $env, logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
+import { logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
 import type { AgentSession } from "../session/agent-session";
 import { growthTools } from "./growth-tools";
-
-// ---------------------------------------------------------------------------
-// Types
 // ---------------------------------------------------------------------------
 
 export interface BotSessionConfig {
@@ -84,10 +81,8 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 				return [botPrompt];
 			},
 		};
-
 		// Dynamic import to avoid circular deps at module load time
 		const { createAgentSession } = await import("../sdk");
-
 		const result: CreateAgentSessionResult = await logger.time(
 			`bot:session:create:${key}`,
 			() => createAgentSession(sessionOpts),
