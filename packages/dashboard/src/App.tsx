@@ -37,7 +37,7 @@ function App() {
           <Persona />
         </TabsContent>
         <TabsContent value="activity">
-          <Activity />
+          <Activity wsMessage={lastMessage} />
         </TabsContent>
         <TabsContent value="settings">
           <Settings />

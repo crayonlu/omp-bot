@@ -7,40 +7,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { get, put } from "../api";
+import { get } from "../api";
 
-interface SettingsData {
-  model: string;
-  status: string;
-}
 
 export default function Settings() {
-  const [settings, setSettings] = useState<SettingsData>({
-    model: "gpt-4",
-    status: "unknown",
-  });
-  const [models] = useState([
-    "gpt-4",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "claude-3-opus",
-    "claude-3-sonnet",
-    "claude-3-haiku",
-  ]);
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    get<SettingsData>("/api/settings").then(setSettings).catch(() => {});
+    Promise.all([
+      get<Array<{ id: string; name: string }>>("/api/models"),
+      get<{ onebot_connected?: boolean }>("/health"),
+    ])
+      .then(([modelList, health]) => {
+        setModels(modelList);
+        if (modelList.length > 0) setSelectedModel(modelList[0].id);
+        setConnected(health.onebot_connected ?? null);
+      })
+      .catch(() => setError("无法加载设置"))
+      .finally(() => setLoading(false));
   }, []);
 
-  const handleModelChange = async (model: string) => {
-    setSettings((s) => ({ ...s, model }));
-    try {
-      await put("/api/settings", { model });
-    } catch {
-      // revert on failure
-      get<SettingsData>("/api/settings").then(setSettings).catch(() => {});
-    }
-  };
+  if (loading) {
+    return <div className="text-sm text-muted-foreground p-4">加载中...</div>;
+  }
+
+  if (error) {
+    return <div className="text-sm text-red-500 p-4">{error}</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -49,14 +46,14 @@ export default function Settings() {
           <CardTitle>模型选择</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={settings.model} onValueChange={handleModelChange}>
+          <Select value={selectedModel} onValueChange={setSelectedModel}>
             <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {models.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -65,15 +62,13 @@ export default function Settings() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>运行状态</CardTitle>
+          <CardTitle>连接状态</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            {settings.status === "running"
-              ? "运行中"
-              : settings.status === "stopped"
-                ? "已停止"
-                : settings.status}
+            {connected === true && "已连接"}
+            {connected === false && "未连接"}
+            {connected === null && "未知"}
           </p>
         </CardContent>
       </Card>

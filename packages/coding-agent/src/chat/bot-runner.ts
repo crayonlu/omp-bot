@@ -172,6 +172,13 @@ async function handleNewApiRoutes(
 	req: Request,
 ): Promise<Response | null> {
 	switch (`${method} ${path}`) {
+		// === Settings ===
+		case "GET /api/settings":
+			return Response.json({
+				model: "deepseek-v4-flash",
+				status: gateway.isConnected ? "running" : "stopped",
+			});
+
 		// === Activity History ===
 		case "GET /api/history": {
 			const key = url.searchParams.get("key") ?? "";

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -16,39 +16,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { get } from "../api";
+import type { ActivityEntry as ActivityEntryType } from "../types";
+import type { WSMessage } from "../hooks/useWebSocket";
 
-interface ActivityEntry {
-  id: string;
-  time: string;
-  user: string;
-  message: string;
-  decision: "replied" | "skipped" | "deferred";
-  reply: string;
-}
 
 const decisionLabel: Record<string, string> = {
   replied: "已回复",
   skipped: "已跳过",
-  deferred: "推迟",
+  error: "错误",
 };
 
-const decisionVariant: Record<string, "default" | "secondary" | "outline"> = {
+const decisionVariant: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   replied: "default",
   skipped: "secondary",
-  deferred: "outline",
+  error: "destructive",
 };
 
-export default function Activity() {
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+export default function Activity({ wsMessage }: { wsMessage: WSMessage | null }) {
+  const [entries, setEntries] = useState<ActivityEntryType[]>([]);
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
     const path =
       filter === "all"
-        ? "/api/activity"
-        : `/api/activity?decision=${filter}`;
-    get<ActivityEntry[]>(path).then(setEntries).catch(() => {});
+        ? "/api/activity?limit=100"
+        : `/api/activity?limit=100&decision=${filter}`;
+    get<ActivityEntryType[]>(path).then(setEntries).catch(() => {});
   }, [filter]);
+  useEffect(() => {
+    if (wsMessage?.type === "activity") {
+      setEntries((prev) => [wsMessage.data as ActivityEntryType, ...prev]);
+    }
+  }, [wsMessage]);
 
   return (
     <div className="space-y-4">
@@ -62,7 +61,7 @@ export default function Activity() {
             <SelectItem value="all">全部</SelectItem>
             <SelectItem value="replied">已回复</SelectItem>
             <SelectItem value="skipped">已跳过</SelectItem>
-            <SelectItem value="deferred">推迟</SelectItem>
+            <SelectItem value="error">错误</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -77,14 +76,14 @@ export default function Activity() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {entries.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell className="whitespace-nowrap text-xs">{e.time}</TableCell>
-              <TableCell>{e.user}</TableCell>
+          {entries.map((e, i) => (
+            <TableRow key={`${e.sessionKey}-${e.timestamp}-${i}`}>
+              <TableCell className="whitespace-nowrap text-xs">{e.timestamp}</TableCell>
+              <TableCell>{e.userName}</TableCell>
               <TableCell className="max-w-xs truncate">{e.message}</TableCell>
               <TableCell>
-                <Badge variant={decisionVariant[e.decision]}>
-                  {decisionLabel[e.decision]}
+                <Badge variant={decisionVariant[e.decision] || "outline"}>
+                  {decisionLabel[e.decision] || e.decision}
                 </Badge>
               </TableCell>
               <TableCell className="max-w-xs truncate text-sm text-muted-foreground">

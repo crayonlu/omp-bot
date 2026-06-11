@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,38 +24,43 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { get, post, del } from "../api";
+import type { ChannelConfig } from "../types";
 
-interface Channel {
-  id: string;
-  type: string;
-  name: string;
-  mode: string;
-}
 
 export default function Channels() {
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<ChannelConfig[]>([]);
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState("qq");
-  const [name, setName] = useState("");
-  const [mode, setMode] = useState("listen");
+  const [targetType, setTargetType] = useState<"private" | "group">("private");
+  const [targetId, setTargetId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [triggerMode, setTriggerMode] = useState<"all" | "mention_only" | "smart" | "off">("smart");
+  const [keywords, setKeywords] = useState("");
 
-  const fetchChannels = () => {
-    get<Channel[]>("/api/channels").then(setChannels).catch(() => {});
-  };
+  const fetchChannels = useCallback(() => {
+    get<ChannelConfig[]>("/api/channels").then(setChannels).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetchChannels();
   }, []);
 
   const handleAdd = async () => {
-    await post<Channel>("/api/channels", { type, name, mode });
+    await post("/api/channels", {
+      targetType,
+      targetId: Number(targetId),
+      displayName,
+      triggerMode,
+      keywords: keywords ? keywords.split(",").map((k) => k.trim()).filter(Boolean) : [],
+    });
     setOpen(false);
-    setName("");
+    setDisplayName("");
+    setTargetId("");
+    setKeywords("");
     fetchChannels();
   };
 
-  const handleDelete = async (id: string) => {
-    await del(`/api/channels/${id}`);
+  const handleDelete = async (ch: ChannelConfig) => {
+    await del(`/api/channels?targetType=${ch.targetType}&targetId=${ch.targetId}`);
     fetchChannels();
   };
 
@@ -73,35 +78,42 @@ export default function Channels() {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm text-muted-foreground">类型</label>
-                <Select value={type} onValueChange={setType}>
+                <label className="mb-1 block text-sm text-muted-foreground">目标类型</label>
+                <Select value={targetType} onValueChange={(v) => setTargetType(v as "private" | "group")}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="qq">QQ</SelectItem>
-                    <SelectItem value="discord">Discord</SelectItem>
-                    <SelectItem value="telegram">Telegram</SelectItem>
-                    <SelectItem value="wechat">微信</SelectItem>
+                    <SelectItem value="private">Private</SelectItem>
+                    <SelectItem value="group">Group</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-sm text-muted-foreground">名称</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="频道名称" />
+                <label className="mb-1 block text-sm text-muted-foreground">目标 ID</label>
+                <Input value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder="数字 ID" type="number" />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-muted-foreground">模式</label>
-                <Select value={mode} onValueChange={setMode}>
+                <label className="mb-1 block text-sm text-muted-foreground">显示名称</label>
+                <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="频道名称" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">触发模式</label>
+                <Select value={triggerMode} onValueChange={(v) => setTriggerMode(v as "all" | "mention_only" | "smart" | "off")}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="listen">监听</SelectItem>
-                    <SelectItem value="chat">聊天</SelectItem>
-                    <SelectItem value="broadcast">广播</SelectItem>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="mention_only">仅提及</SelectItem>
+                    <SelectItem value="smart">智能</SelectItem>
+                    <SelectItem value="off">关闭</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">关键词 (逗号分隔)</label>
+                <Input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="关键词1,关键词2" />
               </div>
               <Button onClick={handleAdd} className="w-full">确认添加</Button>
             </div>
@@ -111,38 +123,38 @@ export default function Channels() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>类型</TableHead>
-            <TableHead>ID</TableHead>
-            <TableHead>名称</TableHead>
-            <TableHead>模式</TableHead>
+            <TableHead>目标类型</TableHead>
+            <TableHead>目标 ID</TableHead>
+            <TableHead>显示名称</TableHead>
+            <TableHead>触发模式</TableHead>
             <TableHead className="w-20">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {channels.map((ch) => (
-            <TableRow key={ch.id}>
-              <TableCell className="capitalize">{ch.type}</TableCell>
-              <TableCell className="font-mono text-xs">{ch.id}</TableCell>
-              <TableCell>{ch.name}</TableCell>
-              <TableCell>{ch.mode}</TableCell>
-              <TableCell>
-                <Button
-                  variant="destructive"
-                  size="xs"
-                  onClick={() => handleDelete(ch.id)}
-                >
-                  删除
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-          {channels.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                暂无频道
-              </TableCell>
-            </TableRow>
-          )}
+          {channels.map((ch, i) => (
+              <TableRow key={`${ch.targetType}-${ch.targetId}-${i}`}>
+                <TableCell className="capitalize">{ch.targetType}</TableCell>
+                <TableCell className="font-mono text-xs">{ch.targetId}</TableCell>
+                <TableCell>{ch.displayName}</TableCell>
+                <TableCell>{ch.triggerMode}</TableCell>
+                <TableCell>
+                  <Button
+                    variant="destructive"
+                    size="xs"
+                    onClick={() => handleDelete(ch)}
+                  >
+                    删除
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {channels.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  暂无频道
+                </TableCell>
+              </TableRow>
+            )}
         </TableBody>
       </Table>
     </div>
