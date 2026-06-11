@@ -445,6 +445,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		if (evt.type === "tool_call_start") {
 			toolCalls.push(evt.toolName);
 		}
+	});
 	logger.info(`[dispatch] session prompt context: ${JSON.stringify(context)}`);
 	try {
 		await botSession.session.prompt(context);
