@@ -531,6 +531,9 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		unsub();
 		if (botSession) {
 			botSession.lastActivity = Date.now();
+		}
+	}
+}
 
 function stripMarkdown(text: string): string {
 	return text
@@ -543,9 +546,6 @@ function stripMarkdown(text: string): string {
 		.replace(/~~(.+?)~~/g, "$1")
 		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
 		.trim();
-}
-		}
-	}
 }
 function extractReplyText(msg: AssistantMessage): string | null {
 	// Only use the last text block — earlier blocks are internal reasoning
