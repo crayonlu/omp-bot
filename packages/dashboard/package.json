@@ -2,18 +2,6 @@
 	"type": "module",
 	"name": "@oh-my-pi/omp-dashboard",
 	"version": "15.10.12",
-	"description": "Web dashboard for omp-bot QQ bot management",
-	"homepage": "https://omp.sh",
-	"author": "Can Boluk",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/can1357/oh-my-pi.git",
-		"directory": "packages/dashboard"
-	},
-	"bugs": {
-		"url": "https://github.com/can1357/oh-my-pi/issues"
-	},
 	"private": true,
 	"scripts": {
 		"dev": "vite",
@@ -21,16 +9,16 @@
 		"preview": "vite preview"
 	},
 	"dependencies": {
-		"animal-island-ui": "^1.0.0",
+		"animal-island-ui": "0.8.1",
 		"classnames": "^2.5.1",
-		"react": "catalog:",
-		"react-dom": "catalog:"
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1"
 	},
 	"devDependencies": {
-		"@types/react": "catalog:",
-		"@types/react-dom": "catalog:",
-		"@vitejs/plugin-react": "^5.1.2",
-		"typescript": "catalog:",
-		"vite": "catalog:"
+		"@types/react": "^18.3.12",
+		"@types/react-dom": "^18.3.1",
+		"@vitejs/plugin-react": "^4.3.4",
+		"typescript": "^5.6.3",
+		"vite": "^6.0.0"
 	}
 }
