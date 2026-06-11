@@ -55,6 +55,13 @@ export function listBotSessions(): BotSession[] {
 	return Array.from(sessions.values());
 }
 
+type SessionChangeCallback = (key: string, active: boolean) => void;
+const sessionChangeCallbacks: SessionChangeCallback[] = [];
+
+export function onSessionChange(cb: SessionChangeCallback): void {
+	sessionChangeCallbacks.push(cb);
+}
+
 export async function createBotSession(key: string, config: BotSessionConfig): Promise<BotSession> {
 	const workspaceDir = getWorkspaceDir(key);
 
@@ -97,6 +104,7 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 		};
 
 		sessions.set(key, botSession);
+		for (const cb of sessionChangeCallbacks) cb(key, true);
 		logger.info(`[bot-session] Created session ${key} at ${workspaceDir}`);
 		return botSession;
 	} finally {
@@ -110,6 +118,7 @@ export async function destroyBotSession(key: string): Promise<void> {
 
 	await botSession.session.dispose();
 	sessions.delete(key);
+	for (const cb of sessionChangeCallbacks) cb(key, false);
 	logger.info(`[bot-session] Destroyed session ${key}`);
 }
 

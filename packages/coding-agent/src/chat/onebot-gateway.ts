@@ -54,6 +54,7 @@ export class OneBotGateway {
 		{ resolve: (data: unknown) => void; reject: (err: Error) => void }
 	>();
 	private connected = false;
+	private statusCallbacks: Array<(connected: boolean) => void> = [];
 
 	get isConnected(): boolean {
 		return this.connected;
@@ -65,6 +66,10 @@ export class OneBotGateway {
 
 	onMessage(handler: OneBotEventHandler): void {
 		this.handler = handler;
+	}
+
+	onStatusChange(cb: (connected: boolean) => void): void {
+		this.statusCallbacks.push(cb);
 	}
 
 	/**
@@ -123,6 +128,7 @@ export class OneBotGateway {
 				open: (ws) => {
 					this.wsConnection = ws;
 					this.connected = true;
+					for (const cb of this.statusCallbacks) cb(true);
 					logger.info(`[onebot] NapCat connected`);
 				},
 				message: (ws, msg) => {
@@ -132,6 +138,7 @@ export class OneBotGateway {
 					this.wsConnection = null;
 					this.connected = false;
 					this.rejectPendingEchoes();
+					for (const cb of this.statusCallbacks) cb(false);
 					logger.warn(`[onebot] NapCat disconnected`);
 				},
 			},

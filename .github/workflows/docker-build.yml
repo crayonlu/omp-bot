@@ -30,6 +30,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build Dashboard
+        run: |
+          cd packages/dashboard
+          npm ci
+          npm run build
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:

@@ -212,6 +212,13 @@ export async function handleDashboardRequest(req: Request): Promise<Response | n
 		return serveDashboard();
 	}
 
+
+	// Static assets (JS, CSS, images, etc.)
+	if (method === "GET" && path.startsWith("/assets/")) {
+		return serveStaticAsset(path);
+	}
+
+
 	// API routes
 	if (!path.startsWith("/api/")) return null; // Not a dashboard route
 
@@ -295,23 +302,54 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 }
 
 // ---------------------------------------------------------------------------
-// Static file serving (dashboard HTML)
+// Static file serving (dashboard HTML + assets)
 // ---------------------------------------------------------------------------
 
-import { readFileSync } from "node:fs";
+const DASHBOARD_DIR = "/app/dashboard";
 
-let cachedDashboardHtml: string | null = null;
+const MIME_TYPES: Record<string, string> = {
+	".html": "text/html; charset=utf-8",
+	".js": "application/javascript",
+	".mjs": "application/javascript",
+	".css": "text/css",
+	".json": "application/json",
+	".svg": "image/svg+xml",
+	".png": "image/png",
+	".ico": "image/x-icon",
+	".woff": "font/woff",
+	".woff2": "font/woff2",
+};
+
+function getMimeType(filePath: string): string {
+	const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+	return MIME_TYPES[ext] ?? "application/octet-stream";
+}
 
 function serveDashboard(): Response {
-	if (!cachedDashboardHtml) {
-		try {
-			const htmlPath = resolve(import.meta.dirname ?? __dirname, "dashboard.html");
-			cachedDashboardHtml = readFileSync(htmlPath, "utf-8");
-		} catch {
-			cachedDashboardHtml = `<!DOCTYPE html><html><body><h1>Dashboard not found</h1></body></html>`;
-		}
+	try {
+		const html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
+		return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+	} catch {
+		return new Response(
+			`<!DOCTYPE html><html><body><h1>Dashboard not found</h1></body></html>`,
+			{ status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } },
+		);
 	}
-	return new Response(cachedDashboardHtml, {
-		headers: { "Content-Type": "text/html; charset=utf-8" },
-	});
 }
+
+function serveStaticAsset(path: string): Response {
+	try {
+		// Strip leading "/assets/" and resolve under DASHBOARD_DIR/assets
+		const relative = path.slice("/assets/".length);
+		const filePath = resolve(DASHBOARD_DIR, "assets", relative);
+		// Prevent directory traversal
+		if (!filePath.startsWith(resolve(DASHBOARD_DIR, "assets"))) {
+			return new Response("Forbidden", { status: 403 });
+		}
+		const data = readFileSync(filePath);
+		return new Response(data, { headers: { "Content-Type": getMimeType(filePath) } });
+	} catch {
+		return new Response("Not Found", { status: 404 });
+	}
+}
+

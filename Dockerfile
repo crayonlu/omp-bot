@@ -187,6 +187,10 @@ RUN bun install --frozen-lockfile --ignore-scripts
 # hoisted node_modules that `bun install` just produced.
 COPY . /pi/
 
+# Dashboard static assets (built by CI, not in the docker build)
+COPY packages/dashboard/dist /app/dashboard/
+
+
 # Regenerate the docs index that `--ignore-scripts` skipped above. The root
 # package.json's `prepare` script normally handles this on a vanilla install.
 RUN bun --cwd=packages/coding-agent run generate-docs-index
