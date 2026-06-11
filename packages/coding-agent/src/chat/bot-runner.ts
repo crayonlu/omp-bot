@@ -487,7 +487,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	// Dispatch to agent
 	const toolCalls: string[] = [];
 	const unsub = botSession.session.subscribe(evt => {
-		if (evt.type === "tool_call_start") {
+		if (evt.type === "tool_execution_start") {
 			toolCalls.push(evt.toolName);
 		}
 	});
