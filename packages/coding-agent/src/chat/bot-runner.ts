@@ -1,7 +1,7 @@
 /**
  * Bot Runner — wires OneBot gateway, CQ parser, trigger decider,
  * message queue, and session dispatch into one pipeline.
- * v3: clean startup, no marketplace setup.
+ * v4: explicit model bypasses OMP resolution hang.
  */
 import { $, type ServerWebSocket } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
