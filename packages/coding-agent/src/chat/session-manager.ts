@@ -175,3 +175,4 @@ function buildBotSessionPrompt(config: BotSessionConfig): string {
 	const override = getPromptOverride();
 	const basePrompt = override ?? BOT_SYSTEM_PROMPT;
 	return `${preamble}\n\n---\n\n${basePrompt}`;
+}
