@@ -465,7 +465,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			}).join(" | ");
 			logger.info(`[dispatch] assistant msg: types=[${contentTypes}] content=${contentPreview}`);
 			logger.info(`[dispatch] assistant attribution=${(assistantMsg as any).attribution} model=${JSON.stringify((assistantMsg as any).model ?? "none")}`);
-			logger.info(`[dispatch] assistant msg user=${(assistantMsg as any).attribution} model=${(assistantMsg as any).model}`);
+			logger.info(`[dispatch] active model from session: ${JSON.stringify(botSession.session.model)}`);
 
 			const replyText = extractReplyText(assistantMsg);
 			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
