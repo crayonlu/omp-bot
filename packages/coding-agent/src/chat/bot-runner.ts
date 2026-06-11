@@ -16,6 +16,8 @@ import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender, setEchoRegisterer } from "./qq-tools";
 import { handleDashboardRequest, logActivity, getRecentActivity, getChannelConfigs, getSessionList, setModelChangeHandler } from "./dashboard-api";
 import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, onSessionChange, listBotSessions, type BotSessionConfig } from "./session-manager";
+
+export interface ChatMessageResponse {
 	tool_calls: string[];
 	error?: string;
 	trigger_reason?: string;
