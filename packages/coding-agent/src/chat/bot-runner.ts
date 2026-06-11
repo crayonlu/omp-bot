@@ -5,7 +5,7 @@
  */
 import { $, type ServerWebSocket } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import type { Args } from "../cli/args";
 import { OneBotGateway, type OneBotMessageEvent } from "./onebot-gateway";
@@ -58,16 +58,15 @@ export function broadcast(data: object): void {
 export async function runBotServer(args: Args): Promise<never> {
 	const port = args.port ?? PORT;
 
-// Process-level error handlers for self-healing
-process.on("uncaughtException", (err) => {
-	try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] UNCAUGHT: ${String(err).slice(0, 500)}`, "utf-8"); } catch {}
-	logger.error(`[bot] Uncaught exception: ${err}`);
-});
-process.on("unhandledRejection", (reason) => {
-	try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] REJECTION: ${String(reason).slice(0, 500)}`, "utf-8"); } catch {}
-	logger.error(`[bot] Unhandled rejection: ${reason}`);
-});
 
+	process.on("uncaughtException", (err: Error) => {
+		try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] UNCAUGHT: ${String(err).slice(0, 500)}`, "utf-8"); } catch {}
+		logger.error(`[bot] Uncaught exception: ${err}`);
+	});
+	process.on("unhandledRejection", (reason: unknown) => {
+		try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] REJECTION: ${String(reason).slice(0, 500)}`, "utf-8"); } catch {}
+		logger.error(`[bot] Unhandled rejection: ${reason}`);
+	});
 	// Enable console transport so 'docker logs' shows output
 	logger.setTransports({ console: true, file: true });
 
@@ -439,16 +438,16 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		};
 	}
 
-	// Check crash marker for self-recovery
+	// Build context for the agent
+
+	// Inject crash marker info for self-recovery
 	let crashContext = "";
 	try {
 		if (existsSync("/data/crash-marker.txt")) {
-			crashContext = `\n\n[SYSTEM: Previous session crashed. Marker: ${readFileSync("/data/crash-marker.txt", "utf-8").slice(0, 500)}]\nPlease investigate and clean up.`;
+			crashContext = `\n\n[SYSTEM] Previous session crashed: ${readFileSync("/data/crash-marker.txt", "utf-8").slice(0, 400)}`;
 			unlinkSync("/data/crash-marker.txt");
 		}
 	} catch {}
-
-	// Build context for the agent
 	const context = buildMessageContext(parsed, event);
 	const targetType = event.message_type;
 	const targetId = targetType === "group" ? event.group_id! : event.user_id;
@@ -472,12 +471,13 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			toolCalls.push(evt.toolName);
 		}
 	});
-	logger.info(`[dispatch] session prompt context: ${JSON.stringify(context)}`);
-	try {
-		await botSession.session.prompt(context);
-	logger.info(`[dispatch] session prompt context: ${JSON.stringify(context)}`);
 	const promptText = crashContext ? context + crashContext : context;
+	logger.info(`[dispatch] session prompt: ${promptText.slice(0, 120)}…`);
 	try {
+		await botSession.session.prompt(promptText);
+		logger.info(`[dispatch] prompt completed for ${sessionKey}`);
+
+		const state = botSession.session.state;
 		const msgCount = state.messages.length;
 		logger.info(`[dispatch] session state has ${msgCount} messages`);
 		const lastMsg = state.messages[msgCount - 1];
