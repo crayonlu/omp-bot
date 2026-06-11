@@ -50,18 +50,17 @@ export default function Activity({ wsMessage }: { wsMessage: WSMessage | null })
   }, [wsMessage]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">筛选决策:</span>
+    <div>
+      <div className="mb-2 flex items-center justify-end">
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="h-7 w-24 text-[11px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部</SelectItem>
-            <SelectItem value="replied">已回复</SelectItem>
-            <SelectItem value="skipped">已跳过</SelectItem>
-            <SelectItem value="error">错误</SelectItem>
+            <SelectItem value="all" className="text-xs">全部</SelectItem>
+            <SelectItem value="replied" className="text-xs">已回复</SelectItem>
+            <SelectItem value="skipped" className="text-xs">已跳过</SelectItem>
+            <SelectItem value="error" className="text-xs">错误</SelectItem>
           </SelectContent>
         </Select>
       </div>
