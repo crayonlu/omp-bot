@@ -1,129 +1,84 @@
-import { useCallback, useEffect, useState } from "react";
-import { Button, Card, Loading, Modal } from "animal-island-ui";
-import { get, put, del } from "../api";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { get, put } from "../api";
 
-const PREVIEW_LEN = 200;
+const defaultPrompt = "你是一个有用的 AI 助手。";
 
 export default function Persona() {
-	const [prompt, setPrompt] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [modalOpen, setModalOpen] = useState(false);
-	const [editText, setEditText] = useState("");
-	const [saving, setSaving] = useState(false);
+  const [prompt, setPrompt] = useState(defaultPrompt);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editValue, setEditValue] = useState("");
 
-	const load = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		try {
-			const data = await get<{ prompt: string | null }>("/api/prompt");
-			setPrompt(data.prompt);
-			setEditText(data.prompt ?? "");
-		} catch (err) {
-			setError(String(err));
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+  useEffect(() => {
+    get<{ prompt: string }>("/api/prompt")
+      .then((d) => {
+        setPrompt(d.prompt);
+        setEditValue(d.prompt);
+      })
+      .catch(() => {});
+  }, []);
 
-	useEffect(() => {
-		load();
-	}, [load]);
+  const handleSave = async () => {
+    await put("/api/prompt", { prompt: editValue });
+    setPrompt(editValue);
+    setEditOpen(false);
+  };
 
-	const handleEdit = () => {
-		setEditText(prompt ?? "");
-		setModalOpen(true);
-	};
+  const handleReset = async () => {
+    await put("/api/prompt", { prompt: defaultPrompt });
+    setPrompt(defaultPrompt);
+    setEditValue(defaultPrompt);
+  };
 
-	const handleSave = async () => {
-		setSaving(true);
-		try {
-			await put("/api/prompt", { prompt: editText });
-			setPrompt(editText);
-			setModalOpen(false);
-		} catch (err) {
-			setError(String(err));
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	const handleReset = async () => {
-		try {
-			await del("/api/prompt");
-			setPrompt(null);
-			setEditText("");
-		} catch (err) {
-			setError(String(err));
-		}
-	};
-
-	if (loading) return <Loading />;
-
-	const preview =
-		prompt && prompt.length > PREVIEW_LEN
-			? `${prompt.slice(0, PREVIEW_LEN)}…`
-			: prompt ?? "（未设置人格覆盖）";
-
-	return (
-		<Card>
-			{error && (
-				<div style={{ color: "#e53935", marginBottom: 12 }}>
-					错误: {error}
-				</div>
-			)}
-
-			<Card color="app-blue" style={{ marginBottom: 16, padding: 16 }}>
-				<div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>
-					当前人格预览
-				</div>
-				<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-					{preview}
-				</div>
-			</Card>
-
-			<div style={{ display: "flex", gap: 8 }}>
-				<Button type="primary" onClick={handleEdit}>
-					编辑人格
-				</Button>
-				{prompt && (
-					<Button danger onClick={handleReset}>
-						重置为默认
-					</Button>
-				)}
-			</div>
-
-			<Modal
-				open={modalOpen}
-				onClose={() => setModalOpen(false)}
-				title="编辑人格"
-				footer={
-					<>
-						<Button onClick={() => setModalOpen(false)}>取消</Button>
-						<Button type="primary" onClick={handleSave} loading={saving}>
-							保存
-						</Button>
-					</>
-				}
-			>
-				<textarea
-					style={{
-						width: "100%",
-						minHeight: 200,
-						padding: 12,
-						border: "1px solid #d4c9b4",
-						borderRadius: 12,
-						fontSize: 14,
-						fontFamily: "inherit",
-						resize: "vertical",
-						background: "#fefaf3",
-						color: "#5c4a3a",
-					}}
-					placeholder="输入系统提示词…"
-					value={editText}
-					onChange={(e) => setEditText(e.target.value)}
-				/>
-			</Modal>
-		</Card>
-	);
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>当前人格提示词</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 whitespace-pre-wrap rounded border bg-muted p-3 text-sm">
+            {prompt}
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={() => { setEditValue(prompt); setEditOpen(true); }}>
+              编辑
+            </Button>
+            <Button variant="outline" onClick={handleReset}>
+              重置默认
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑人格提示词</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <textarea
+              className="h-48 w-full rounded border border-input bg-transparent p-3 text-sm"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+            />
+            <Button onClick={handleSave} className="w-full">
+              保存
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

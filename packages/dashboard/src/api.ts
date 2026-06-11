@@ -1,36 +1,33 @@
-/** REST helpers wrapping fetch. Base URL from env or relative. */
+const BASE = "";
 
-const BASE = import.meta.env.VITE_API_BASE ?? "";
-
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-	const url = `${BASE}${path}`;
-	const opts: RequestInit = {
-		method,
-		headers: { "Content-Type": "application/json" },
-	};
-	if (body !== undefined) {
-		opts.body = JSON.stringify(body);
-	}
-	const res = await fetch(url, opts);
-	if (!res.ok) {
-		const text = await res.text().catch(() => "");
-		throw new Error(`${method} ${path} ${res.status}: ${text}`);
-	}
-	return res.json() as Promise<T>;
+export async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  return res.json();
 }
 
-export function get<T>(path: string): Promise<T> {
-	return request<T>("GET", path);
+export async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+  return res.json();
 }
 
-export function post<T>(path: string, body?: unknown): Promise<T> {
-	return request<T>("POST", path, body);
+export async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
+  return res.json();
 }
 
-export function put<T>(path: string, body?: unknown): Promise<T> {
-	return request<T>("PUT", path, body);
-}
-
-export function del<T>(path: string): Promise<T> {
-	return request<T>("DELETE", path);
+export async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
+  return res.json();
 }
