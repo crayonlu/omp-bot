@@ -5,14 +5,14 @@
  * AgentSession in its own workspace directory. Sessions are lazy-created
  * on first message and persisted indefinitely.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
 import type { AgentSession } from "../session/agent-session";
+import { SessionManager } from "../session/session-manager";
 import { growthTools } from "./growth-tools";
 import { qqTools } from "./qq-tools";
-
 
 export interface BotSessionConfig {
 	targetType: "private" | "group";
@@ -70,6 +70,21 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 	const prevProjectDir = getProjectDir();
 	setProjectDir(workspaceDir);
 
+	// Try to restore previous session from file
+	const recoveryPath = `/data/last-session-${key}.path`;
+	let restoredManager: SessionManager | undefined;
+	if (existsSync(recoveryPath)) {
+		try {
+			const sessionFile = readFileSync(recoveryPath, "utf-8").trim();
+			if (existsSync(sessionFile)) {
+				restoredManager = await SessionManager.open(sessionFile);
+				logger.info(`[bot-session] Restored session ${key} from ${sessionFile}`);
+			}
+		} catch (err) {
+			logger.warn(`[bot-session] Failed to restore session ${key}: ${err}`);
+		}
+	}
+
 	try {
 		const sessionOpts: CreateAgentSessionOptions = {
 			cwd: workspaceDir,
@@ -82,7 +97,9 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 				return [botPrompt];
 			},
 		};
-		// Dynamic import to avoid circular deps at module load time
+		if (restoredManager) {
+			(sessionOpts as any).sessionManager = restoredManager;
+		}
 		const { createAgentSession } = await import("../sdk");
 		const result: CreateAgentSessionResult = await logger.time(
 			`bot:session:create:${key}`,
