@@ -462,9 +462,10 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			const contentTypes = assistantMsg.content.map(c => (c as any).type).join(", ");
 			const contentPreview = assistantMsg.content.map(c => {
 				const t = (c as any).text ?? (c as any).thinking ?? (c as any).name ?? "";
-				return `[${(c as any).type}]: ${String(t).slice(0, 80)}`;
 			}).join(" | ");
 			logger.info(`[dispatch] assistant msg: types=[${contentTypes}] content=${contentPreview}`);
+			logger.info(`[dispatch] assistant attribution=${(assistantMsg as any).attribution} model=${JSON.stringify((assistantMsg as any).model ?? "none")}`);
+			logger.info(`[dispatch] assistant msg user=${(assistantMsg as any).attribution} model=${(assistantMsg as any).model}`);
 
 			const replyText = extractReplyText(assistantMsg);
 			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
