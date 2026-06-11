@@ -95,7 +95,15 @@ try {
 	// Start HTTP server for health checks + dashboard + WebSocket
 	const server = Bun.serve({
 		port,
-		fetch: handleHttpRequest,
+		fetch(req) {
+			// WebSocket upgrade for dashboard real-time
+			const url = new URL(req.url);
+			if (url.pathname === "/ws" && req.headers.get("upgrade") === "websocket") {
+				if (server.upgrade(req)) return;
+				return new Response("Upgrade failed", { status: 500 });
+			}
+			return handleHttpRequest(req);
+		},
 		websocket: {
 			open(ws) {
 				wsClients.add(ws);
