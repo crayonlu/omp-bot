@@ -58,10 +58,9 @@ export function broadcast(data: object): void {
 export async function runBotServer(args: Args): Promise<never> {
 	const port = args.port ?? PORT;
 
-	// Prevent process.exit from crashing the bot
-	const realExit = process.exit.bind(process);
+	// Intercept process.exit to prevent crashes and log the caller
 	(process as any).exit = function (code?: number) {
-		logger.warn(`[bot] process.exit(${code}) called — catching to prevent crash`);
+		logger.warn(`[bot] process.exit(${code}) called — stack: ${new Error().stack?.split("\n").slice(1, 5).join(" → ")}`);
 	};
 
 	process.on("uncaughtException", (err: Error) => {
