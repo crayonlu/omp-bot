@@ -491,7 +491,8 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 				attribution: (assistantMsg as any).attribution,
 				content: assistantMsg.content.map(c => ({type: (c as any).type, hasText: !!((c as any)?.text?.trim())}))
 			}).slice(0, 400)}`);
-			const replyText = extractReplyText(assistantMsg);
+			let replyText = extractReplyText(assistantMsg);
+			if (replyText) replyText = stripMarkdown(replyText);
 			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
 			if (replyText) {
 				try {
@@ -527,6 +528,19 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		unsub();
 		if (botSession) {
 			botSession.lastActivity = Date.now();
+
+function stripMarkdown(text: string): string {
+	return text
+		.replace(/\*\*\*(.+?)\*\*\*/g, "$1")
+		.replace(/\*\*(.+?)\*\*/g, "$1")
+		.replace(/\*(.+?)\*/g, "$1")
+		.replace(/`{3}[^`]*`{3}/gs, "")
+		.replace(/`([^`]+)`/g, "$1")
+		.replace(/^(#{1,6})\s*/gm, "")
+		.replace(/~~(.+?)~~/g, "$1")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.trim();
+}
 		}
 	}
 }
