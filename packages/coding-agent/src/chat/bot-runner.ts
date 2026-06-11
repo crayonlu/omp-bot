@@ -463,8 +463,37 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 						target_id: targetId,
 						content: replyText,
 					});
+	try {
+		logger.info(`[dispatch] prompt starting for ${sessionKey} (msg: ${context.slice(0, 60)}…)`);
+		await botSession.session.prompt(context);
+		logger.info(`[dispatch] prompt completed for ${sessionKey}`);
+
+		const state = botSession.session.state;
+		const msgCount = state.messages.length;
+		const lastMsg = state.messages[msgCount - 1];
+
+		if (lastMsg?.role === "assistant") {
+			const assistantMsg = lastMsg as AssistantMessage;
+			const contentTypes = assistantMsg.content.map(c => (c as any).type).join(", ");
+			const contentPreview = assistantMsg.content.map(c => {
+				const t = (c as any).text ?? (c as any).thinking ?? (c as any).name ?? "";
+				return `[${(c as any).type}]: ${String(t).slice(0, 80)}`;
+			}).join(" | ");
+			logger.info(`[dispatch] assistant msg: types=[${contentTypes}] content=${contentPreview}`);
+
+			const replyText = extractReplyText(assistantMsg);
+			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 100)) : "null"}`);
+
+			if (replyText) {
+				try {
+					await qqSendMessage({
+						target_type: targetType,
+						target_id: targetId,
+						content: replyText,
+					});
+					logger.info(`[dispatch] auto-sent reply to ${targetType}:${targetId}`);
 				} catch (err) {
-					logger.error(`[bot] Failed to send reply: ${err}`);
+					logger.error(`[dispatch] Failed to send reply: ${err}`);
 				}
 			}
 
@@ -477,6 +506,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			};
 		}
 
+		logger.info(`[dispatch] last message role is "${lastMsg?.role}", not assistant. full state messages: ${msgCount}`);
 		return {
 			reply: null,
 			silent: true,
@@ -491,7 +521,6 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		}
 	}
 }
-
 function extractReplyText(msg: AssistantMessage): string | null {
 	let text = "";
 	for (const block of msg.content) {
