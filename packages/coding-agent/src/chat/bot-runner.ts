@@ -1,8 +1,7 @@
 /**
  * Bot Runner — wires OneBot gateway, CQ parser, trigger decider,
  * message queue, and session dispatch into one pipeline.
- *
- * v2: self_id fallback from event when gateway not yet connected.
+ * v3: clean startup, no marketplace setup.
  */
 import { $, type ServerWebSocket } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
