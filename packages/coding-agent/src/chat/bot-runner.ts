@@ -58,6 +58,16 @@ export function broadcast(data: object): void {
 export async function runBotServer(args: Args): Promise<never> {
 	const port = args.port ?? PORT;
 
+// Process-level error handlers for self-healing
+process.on("uncaughtException", (err) => {
+	try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] UNCAUGHT: ${String(err).slice(0, 500)}`, "utf-8"); } catch {}
+	logger.error(`[bot] Uncaught exception: ${err}`);
+});
+process.on("unhandledRejection", (reason) => {
+	try { writeFileSync("/data/crash-marker.txt", `[${new Date().toISOString()}] REJECTION: ${String(reason).slice(0, 500)}`, "utf-8"); } catch {}
+	logger.error(`[bot] Unhandled rejection: ${reason}`);
+});
+
 	// Enable console transport so 'docker logs' shows output
 	logger.setTransports({ console: true, file: true });
 
@@ -429,6 +439,15 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		};
 	}
 
+	// Check crash marker for self-recovery
+	let crashContext = "";
+	try {
+		if (existsSync("/data/crash-marker.txt")) {
+			crashContext = `\n\n[SYSTEM: Previous session crashed. Marker: ${readFileSync("/data/crash-marker.txt", "utf-8").slice(0, 500)}]\nPlease investigate and clean up.`;
+			unlinkSync("/data/crash-marker.txt");
+		}
+	} catch {}
+
 	// Build context for the agent
 	const context = buildMessageContext(parsed, event);
 	const targetType = event.message_type;
@@ -456,9 +475,9 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	logger.info(`[dispatch] session prompt context: ${JSON.stringify(context)}`);
 	try {
 		await botSession.session.prompt(context);
-		logger.info(`[dispatch] prompt completed for ${sessionKey}`);
-
-		const state = botSession.session.state;
+	logger.info(`[dispatch] session prompt context: ${JSON.stringify(context)}`);
+	const promptText = crashContext ? context + crashContext : context;
+	try {
 		const msgCount = state.messages.length;
 		logger.info(`[dispatch] session state has ${msgCount} messages`);
 		const lastMsg = state.messages[msgCount - 1];
