@@ -32,6 +32,9 @@ jobs:
 
       - name: Build Dashboard
         run: |
+          curl -fsSL https://bun.sh/install | bash
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
           cd packages/dashboard
           bun install
           bun run build
