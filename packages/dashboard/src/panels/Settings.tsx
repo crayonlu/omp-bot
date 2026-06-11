@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { get } from "../api"
+import { get, post } from "../api"
 import type { WSMessage } from "../hooks/useWebSocket"
 
 interface ModelInfo {
@@ -25,50 +25,40 @@ interface ModelInfo {
 export default function Settings({ wsMessage }: { wsMessage: WSMessage | null }) {
   const [open, setOpen] = useState(false)
   const [models, setModels] = useState<ModelInfo[]>([])
-  const [status, setStatus] = useState<{
-    connected: boolean
-  }>({ connected: false })
+  const [current, setCurrent] = useState("")
+  const [status, setStatus] = useState<{ connected: boolean }>({ connected: false })
 
   useEffect(() => {
     get<ModelInfo[]>("/api/models")
-      .then(setModels)
+      .then(list => { setModels(list); if (list.length > 0) setCurrent(list[0].id) })
       .catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (wsMessage?.type === "status" && wsMessage.data) {
-      setStatus(wsMessage.data as { connected: boolean })
+    if (wsMessage?.type === "status" && wsMessage.data && typeof wsMessage.data === "object") {
+      const d = wsMessage.data as Record<string, unknown>
+      if (typeof d.connected === "boolean") {
+        setStatus({ connected: d.connected })
+      }
     }
   }, [wsMessage])
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-6"
-        onClick={() => setOpen(true)}
-      >
+      <Button variant="ghost" size="icon" className="size-6" onClick={() => setOpen(true)}>
         <SettingsIcon className="size-3.5" />
       </Button>
-
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-sm font-medium">
-              Settings
-            </DialogTitle>
+            <DialogTitle className="text-sm font-medium">Settings</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground">
-                Model
-              </label>
-              <Select>
+              <label className="text-[11px] font-medium text-muted-foreground">Model</label>
+              <Select value={current} onValueChange={(v) => { setCurrent(v); post("/api/model", { model: v }).catch(() => {}) }}>
                 <SelectTrigger className="mt-1 h-8 text-xs">
-                  <SelectValue
-                    placeholder={models[0]?.name ?? "loading…"}
-                  />
+                  <SelectValue placeholder="select model" />
                 </SelectTrigger>
                 <SelectContent>
                   {models.map((m) => (
@@ -80,15 +70,9 @@ export default function Settings({ wsMessage }: { wsMessage: WSMessage | null })
               </Select>
             </div>
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground">
-                Status
-              </label>
+              <label className="text-[11px] font-medium text-muted-foreground">Status</label>
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                <span
-                  className={`inline-block size-2 rounded-full ${
-                    status.connected ? "bg-emerald-500" : "bg-red-500"
-                  }`}
-                />
+                <span className={`inline-block size-2 rounded-full ${status.connected ? "bg-emerald-500" : "bg-red-500"}`} />
                 {status.connected ? "Connected" : "Disconnected"}
               </div>
             </div>

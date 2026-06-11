@@ -44,8 +44,11 @@ export default function Overview({ wsMessage }: { wsMessage: WSMessage | null })
   }, [])
 
   useEffect(() => {
-    if (wsMessage?.type === "stats") {
-      setOverview(wsMessage.data as OverviewStats)
+    if (wsMessage?.type === "stats" && wsMessage.data && typeof wsMessage.data === "object") {
+      const d = wsMessage.data as Record<string, unknown>
+      if (typeof d.sessionCount === "number") {
+        setOverview(wsMessage.data as OverviewStats)
+      }
     }
   }, [wsMessage])
 

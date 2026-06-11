@@ -273,7 +273,12 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 		// Models
 		case "GET /api/models":
 			return Response.json(getAvailableModels());
-		// Friends list
+		case "POST /api/model": {
+			const body = await req.json() as { model: string };
+			writeFileSync("/data/selected-model.txt", body.model, "utf-8");
+			logger.info(`[api] Model switched to ${body.model}`);
+			return Response.json({ ok: true });
+		}
 		case "GET /api/friends": {
 			const friends = await fetchFriends();
 			return Response.json(friends);
