@@ -4,10 +4,21 @@
  * Formats the message with user identity, trigger reason, and any
  * rich media context extracted from CQ codes.
  */
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+
 import type { BotSession } from "./session-manager";
 import type { ChatMessageRequest } from "./serve-cli";
 
 export function buildBotContext(session: BotSession, req: ChatMessageRequest): string {
+	// Inject crash marker info for self-recovery
+	let crashContext = "";
+	try {
+		if (existsSync("/data/crash-marker.txt")) {
+			crashContext = `\n\n[SYSTEM] Previous session crashed: ${readFileSync("/data/crash-marker.txt", "utf-8").slice(0, 400)}`;
+			unlinkSync("/data/crash-marker.txt");
+		}
+	} catch {}
+
 	const now = new Date().toISOString();
 	const uid = `[uid:${req.target_id}]`;
 	const name = req.user_name ?? `user_${req.target_id}`;
@@ -59,6 +70,10 @@ export function buildBotContext(session: BotSession, req: ChatMessageRequest): s
 	context += `\n\n---`;
 	context += `\nTrigger reason: ${triggerReason}`;
 	context += `\nYou are in a ${chatType} conversation with ${name}.`;
+	// Append crash context if present
+	if (crashContext) {
+		context += crashContext;
+	}
 
 	return context;
 }

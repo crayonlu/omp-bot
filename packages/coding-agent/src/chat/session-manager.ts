@@ -5,7 +5,7 @@
  * AgentSession in its own workspace directory. Sessions are lazy-created
  * on first message and persisted indefinitely.
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
@@ -101,6 +101,15 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 		sessions.set(key, botSession);
 		for (const cb of sessionChangeCallbacks) cb(key, true);
 		logger.info(`[bot-session] Created session ${key} at ${workspaceDir}`);
+
+	// Save session file path so Zero can recover it on restart
+	const sessionFilePath = result.session.sessionFile;
+	if (sessionFilePath) {
+		try {
+			writeFileSync(`/data/last-session-${key}.path`, sessionFilePath, "utf-8");
+			logger.debug(`[bot-session] Saved session file path: /data/last-session-${key}.path -> ${sessionFilePath}`);
+		} catch {}
+	}
 		return botSession;
 	} finally {
 		setProjectDir(prevProjectDir);

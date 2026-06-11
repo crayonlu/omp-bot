@@ -5,7 +5,7 @@
  */
 import { $, type ServerWebSocket } from "bun";
 import { logger } from "@oh-my-pi/pi-utils";
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import type { Args } from "../cli/args";
 import { OneBotGateway, type OneBotMessageEvent } from "./onebot-gateway";
@@ -80,6 +80,16 @@ export async function runBotServer(args: Args): Promise<never> {
 	});
 	// Enable console transport so 'docker logs' shows output
 	logger.setTransports({ console: true, file: true });
+
+// ---------------------------------------------------------------------------
+// Git marketplace mirror
+// ---------------------------------------------------------------------------
+try {
+	await $`git config --global url."https://ghfast.top/https://github.com/".insteadOf https://github.com/`;
+	logger.info(`[setup] git mirror configured: ghfast.top`);
+} catch (err) {
+	logger.warn(`[setup] git mirror config failed: ${err}`);
+}
 
 
 	// Start HTTP server for health checks + dashboard + WebSocket
@@ -449,17 +459,8 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		};
 	}
 
-	// Build context for the agent
-
-	// Inject crash marker info for self-recovery
-	let crashContext = "";
-	try {
-		if (existsSync("/data/crash-marker.txt")) {
-			crashContext = `\n\n[SYSTEM] Previous session crashed: ${readFileSync("/data/crash-marker.txt", "utf-8").slice(0, 400)}`;
-			unlinkSync("/data/crash-marker.txt");
-		}
-	} catch {}
 	const context = buildMessageContext(parsed, event);
+
 	const targetType = event.message_type;
 	const targetId = targetType === "group" ? event.group_id! : event.user_id;
 	const sessionKey = `${targetType}:${targetId}`;
@@ -484,6 +485,14 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		};
 		botSession = await createBotSession(sessionKey, config);
 	}
+	// Session recovery: check for a saved session file from a previous process life
+	try {
+		const recoveryPath = `/data/last-session-${sessionKey}.path`;
+		if (existsSync(recoveryPath)) {
+			const savedPath = readFileSync(recoveryPath, "utf-8").trim();
+			logger.info(`[dispatch] Found saved session file for ${sessionKey}: ${savedPath} — future: use SessionManager.open() to restore`);
+		}
+	} catch {}
 	// Dispatch to agent
 	const toolCalls: string[] = [];
 	const unsub = botSession.session.subscribe(evt => {
@@ -491,7 +500,8 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			toolCalls.push(evt.toolName);
 		}
 	});
-	const promptText = crashContext ? context + crashContext : context;
+	const promptText = context;
+
 	logger.info(`[dispatch] session prompt: ${promptText.slice(0, 120)}…`);
 	try {
 		await botSession.session.prompt(promptText);
@@ -500,6 +510,17 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		const state = botSession.session.state;
 		const msgCount = state.messages.length;
 		logger.info(`[dispatch] session state has ${msgCount} messages`);
+
+		// Auto-summarize every 5 turns
+		if (msgCount > 5 && msgCount % 5 === 0) {
+			logger.info(`[dispatch] ${msgCount} messages reached — injecting memory summary`);
+			try {
+				const summaryPrompt = `[SYSTEM] This conversation has reached ${msgCount} messages. Summarize key points discussed, decisions made, and preferences expressed into /workspace/memory.md. Keep it concise.`;
+				await botSession.session.prompt(summaryPrompt);
+			} catch (sumErr) {
+				logger.warn(`[dispatch] memory summary injection failed: ${sumErr}`);
+			}
+		}
 		const lastMsg = state.messages[msgCount - 1];
 
 		if (lastMsg?.role === "assistant") {
