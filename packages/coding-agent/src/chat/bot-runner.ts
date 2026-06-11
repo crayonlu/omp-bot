@@ -14,6 +14,7 @@ import { getBotSession, createBotSession, type BotSessionConfig } from "./sessio
 import type { ChatMessageResponse } from "./serve-cli";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender } from "./qq-tools";
+import { handleDashboardRequest, logActivity } from "./dashboard-api";
 
 // ---------------------------------------------------------------------------
 // Bot Server
@@ -52,9 +53,12 @@ export async function runBotServer(args: Args): Promise<never> {
 // ---------------------------------------------------------------------------
 // HTTP Handler
 // ---------------------------------------------------------------------------
-
 async function handleHttpRequest(req: Request): Promise<Response> {
 	const url = new URL(req.url);
+
+	// Dashboard routes first
+	const dashboardResp = await handleDashboardRequest(req);
+	if (dashboardResp) return dashboardResp;
 
 	switch (`${req.method} ${url.pathname}`) {
 		case "GET /health":
@@ -66,7 +70,6 @@ async function handleHttpRequest(req: Request): Promise<Response> {
 			});
 
 		case "GET /chat/message":
-			// Manual test endpoint
 			return Response.json({ message: "use POST /chat/message" });
 
 		case "POST /chat/message":
@@ -107,7 +110,20 @@ async function processMessageQueue(): Promise<void> {
 			const msg = queue.dequeue();
 			if (msg) {
 				try {
-					await dispatchMessage(msg.event);
+					const result = await dispatchMessage(msg.event);
+					// Log activity
+					const targetType = msg.event.message_type;
+					const targetId = targetType === "group" ? msg.event.group_id! : msg.event.user_id;
+					logActivity({
+						timestamp: new Date().toISOString(),
+						sessionKey: `${targetType}:${targetId}`,
+						userId: msg.event.user_id,
+						userName: msg.event.sender.nickname,
+						message: msg.event.raw_message.slice(0, 200),
+						decision: result.silent ? "skipped" : "replied",
+						reason: result.trigger_reason ?? result.error ?? "",
+						reply: result.reply?.slice(0, 200),
+					});
 				} catch (err) {
 					logger.error(`[bot] Error processing message: ${err}`);
 				}

@@ -1,47 +1,23 @@
 /**
  * Trigger Decider — determines whether an inbound QQ message should
  * wake up the OMP agent based on channel configuration.
+ *
+ * Config stored via dashboard-api's persistent channel store.
  */
 import type { OneBotMessageEvent } from "./onebot-gateway";
 import type { ParsedMessage } from "./cq-parser";
+import { getChannelConfig as getPersistedConfig } from "./dashboard-api";
+import type { ChannelConfig } from "./dashboard-api";
 
 export type TriggerMode = "all" | "mention_only" | "smart" | "off";
-
-export interface ChannelTriggerConfig {
-	targetId: number;
-	targetType: "private" | "group";
-	triggerMode: TriggerMode;
-	keywords?: string[];
-}
 
 export interface TriggerDecision {
 	shouldTrigger: boolean;
 	reason: string;
 }
 
-/** In-memory channel config store. Persisted to disk later. */
-const channelConfigs = new Map<string, ChannelTriggerConfig>();
-
-// Default configs
 const DEFAULT_PRIVATE: TriggerMode = "all";
 const DEFAULT_GROUP: TriggerMode = "mention_only";
-
-export function setChannelConfig(key: string, config: ChannelTriggerConfig): void {
-	channelConfigs.set(key, config);
-}
-
-export function getChannelConfig(key: string): ChannelTriggerConfig | undefined {
-	return channelConfigs.get(key);
-}
-
-export function getEffectiveTriggerMode(
-	targetType: "private" | "group",
-	targetId: number,
-): TriggerMode {
-	const key = `${targetType}:${targetId}`;
-	return channelConfigs.get(key)?.triggerMode
-		?? (targetType === "private" ? DEFAULT_PRIVATE : DEFAULT_GROUP);
-}
 
 /**
  * Decide whether this message should trigger the agent.
@@ -49,57 +25,50 @@ export function getEffectiveTriggerMode(
 export function shouldTrigger(
 	event: OneBotMessageEvent,
 	parsed: ParsedMessage,
-	botSelfId: number,
+	_botSelfId: number,
 ): TriggerDecision {
 	const targetType = event.message_type;
 	const targetId = targetType === "group" ? event.group_id! : event.user_id;
 	const key = `${targetType}:${targetId}`;
-	const config = channelConfigs.get(key);
+
+	const config = getPersistedConfig(key);
+	const mode = config?.triggerMode ?? (targetType === "private" ? DEFAULT_PRIVATE : DEFAULT_GROUP);
 
 	// Explicitly off → never trigger
-	if (config?.triggerMode === "off") {
-		return { shouldTrigger: false, reason: "channel is set to off" };
+	if (mode === "off") {
+		return { shouldTrigger: false, reason: "channel set to off" };
 	}
 
-	// Private chat: default = all
+	// Private chat
 	if (targetType === "private") {
-		if (config?.triggerMode === "mention_only" && !parsed.mentionsBot && !parsed.mentionsAll) {
-			return { shouldTrigger: false, reason: "private chat set to mention_only, no @mention" };
+		if (mode === "mention_only" && !parsed.mentionsBot && !parsed.mentionsAll) {
+			return { shouldTrigger: false, reason: "private chat mention_only, no @mention" };
 		}
-		return { shouldTrigger: true, reason: "private chat (mode=all)" };
+		return { shouldTrigger: true, reason: "private chat" };
 	}
 
-	// Group chat: default = mention_only
-	const mode = config?.triggerMode ?? DEFAULT_GROUP;
-
+	// Group chat
 	switch (mode) {
 		case "all":
-			return { shouldTrigger: true, reason: "group chat mode=all" };
-
+			return { shouldTrigger: true, reason: "group mode=all" };
 		case "mention_only":
 			if (parsed.mentionsBot || parsed.mentionsAll) {
-				return { shouldTrigger: true, reason: "@mention detected" };
+				return { shouldTrigger: true, reason: "@mention" };
 			}
-			return { shouldTrigger: false, reason: "no @mention (mode=mention_only)" };
-
+			return { shouldTrigger: false, reason: "no @mention" };
 		case "smart":
 			if (parsed.mentionsBot || parsed.mentionsAll) {
-				return { shouldTrigger: true, reason: "@mention detected (smart mode)" };
+				return { shouldTrigger: true, reason: "@mention (smart)" };
 			}
-			// Check keywords
 			if (config?.keywords && config.keywords.length > 0) {
 				const text = parsed.plainText.toLowerCase();
 				const matched = config.keywords.find(kw => text.includes(kw.toLowerCase()));
 				if (matched) {
-					return { shouldTrigger: true, reason: `keyword match: "${matched}"` };
+					return { shouldTrigger: true, reason: `keyword: "${matched}"` };
 				}
 			}
-			return { shouldTrigger: false, reason: "no trigger condition met (smart mode)" };
-
-		case "off":
-			return { shouldTrigger: false, reason: "channel is off" };
-
+			return { shouldTrigger: false, reason: "no trigger (smart)" };
 		default:
-			return { shouldTrigger: false, reason: `unknown mode: ${mode}` };
+			return { shouldTrigger: false, reason: "no trigger" };
 	}
 }
