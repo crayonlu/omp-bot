@@ -8,6 +8,12 @@ import { logger } from "@oh-my-pi/pi-utils";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fetchFriends, fetchGroups } from "./qq-tools";
+
+// Model change callback — wired by bot-runner to apply model to running sessions
+let onModelChange: ((modelId: string) => void) | null = null;
+export function setModelChangeHandler(handler: (modelId: string) => void): void {
+	onModelChange = handler;
+}
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
