@@ -82,7 +82,10 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 			model: {
 				id: "deepseek/deepseek-v4-flash",
 				provider: "ppio",
+				api: "openai-completions",
+				baseUrl: "https://api.ppio.com/openai",
 				reasoning: false,
+				input: ["text"],
 			},
 			systemPrompt: (_defaultBlocks) => {
 				const botPrompt = buildBotSessionPrompt(config);
