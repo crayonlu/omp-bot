@@ -107,8 +107,6 @@ export async function runBotServer(args: Args): Promise<never> {
 	// Start processing loop
 	processMessageQueue();
 
-	// One-time: ensure at least one marketplace source is configured
-	ensureMarketplaceSource();
 
 
 	// Periodic stats snapshot every 30s
@@ -128,32 +126,10 @@ export async function runBotServer(args: Args): Promise<never> {
 		};
 		broadcast({ type: "stats", overview });
 	}, 30_000).unref();
+
 	// Keep alive
 	await new Promise(() => {});
 }
-async function ensureMarketplaceSource(): Promise<void> {
-	const defaultSource = process.env.OMP_MARKETPLACE_SOURCE ?? "can1357/oh-my-pi";
-
-	try {
-		const result = await $`/usr/local/bin/omp plugin marketplace list`.quiet();
-		const output = result.stdout.toString().trim();
-
-		if (!output || output.includes("No marketplaces configured")) {
-			logger.info(`[bot] No marketplace sources configured. Adding default: ${defaultSource}`);
-			const addResult =
-				await $`/usr/local/bin/omp plugin marketplace add ${defaultSource}`.quiet();
-			logger.info(`[bot] Marketplace source added: ${addResult.stdout.toString().trim()}`);
-		} else {
-			logger.info(`[bot] Marketplace sources already configured, skipping default add`);
-		}
-	} catch (err: any) {
-		const message = err.stderr?.toString().trim() ?? String(err);
-		logger.info(`[bot] Failed to ensure marketplace source: ${message}`);
-	}
-}
-
-
-
 // ---------------------------------------------------------------------------
 // New API Routes
 // ---------------------------------------------------------------------------
