@@ -468,11 +468,11 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	}
 
 	const context = buildMessageContext(parsed, event);
+	const hasImages = parsed.imageUrls.length > 0;
 
 	const targetType = event.message_type;
 	const targetId = targetType === "group" ? event.group_id! : event.user_id;
 	const sessionKey = `${targetType}:${targetId}`;
-
 	// Get or create session (recreate if previous was disposed by shutdown)
 	let botSession = getBotSession(sessionKey);
 	if (botSession) {
@@ -510,10 +510,13 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	});
 	const promptText = context;
 
-	logger.info(`[dispatch] session prompt: ${promptText.slice(0, 120)}…`);
+	const promptImages = hasImages
+		? parsed.imageUrls.map(url => ({ type: "image" as const, image: url }))
+		: undefined;
+
+	logger.info(`[dispatch] session prompt: ${promptText.slice(0, 120)}…${hasImages ? ` +${parsed.imageUrls.length} image(s)` : ""}`);
 	try {
-		await botSession.session.prompt(promptText);
-		logger.info(`[dispatch] prompt completed for ${sessionKey}`);
+		await botSession.session.prompt(promptText, promptImages ? { images: promptImages } : undefined);
 
 		const state = botSession.session.state;
 		const msgCount = state.messages.length;
