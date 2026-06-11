@@ -493,10 +493,20 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 }
 
 function extractReplyText(msg: AssistantMessage): string | null {
+	let text = "";
 	for (const block of msg.content) {
 		if (block.type === "text" && block.text.trim()) {
-			return block.text.trim();
+			text += block.text.trim() + "\n";
+		}
+		if (block.type === "thinking") {
+			const t = block as { thinking: string };
+			if (t.thinking?.trim()) {
+				text += t.thinking.trim() + "\n";
+			}
 		}
 	}
-	return null;
+	text = text.trim();
+	// If only thinking content, clean it for user-friendly output
+	// (thinking blocks often start with internal reasoning markers)
+	return text || null;
 }
