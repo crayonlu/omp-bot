@@ -459,17 +459,15 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 
 		if (lastMsg?.role === "assistant") {
 			const assistantMsg = lastMsg as AssistantMessage;
-			const contentTypes = assistantMsg.content.map(c => (c as any).type).join(", ");
-			const contentPreview = assistantMsg.content.map(c => {
-				const t = (c as any).text ?? (c as any).thinking ?? (c as any).name ?? "";
-			}).join(" | ");
-			logger.info(`[dispatch] assistant msg: types=[${contentTypes}] content=${contentPreview}`);
-			logger.info(`[dispatch] assistant attribution=${(assistantMsg as any).attribution} model=${JSON.stringify((assistantMsg as any).model ?? "none")}`);
-			logger.info(`[dispatch] active model from session: ${JSON.stringify(botSession.session.model)}`);
-
+			logger.info(`[dispatch] FULL assistant: ${JSON.stringify({
+				role: assistantMsg.role,
+				contentCount: assistantMsg.content.length,
+				model: (assistantMsg as any).model,
+				attribution: (assistantMsg as any).attribution,
+				content: assistantMsg.content.map(c => ({type: (c as any).type, hasText: !!((c as any)?.text?.trim())}))
+			}).slice(0, 400)}`);
 			const replyText = extractReplyText(assistantMsg);
 			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
-			logger.info(`[dispatch] raw content[0] text="${JSON.stringify((assistantMsg.content[0] as any)?.text ?? "")}"`);
 			if (replyText) {
 				try {
 					await qqSendMessage({
