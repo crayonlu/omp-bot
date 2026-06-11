@@ -454,6 +454,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 
 		const state = botSession.session.state;
 		const msgCount = state.messages.length;
+		logger.info(`[dispatch] session state has ${msgCount} messages`);
 		const lastMsg = state.messages[msgCount - 1];
 
 		if (lastMsg?.role === "assistant") {
@@ -466,8 +467,8 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			logger.info(`[dispatch] assistant msg: types=[${contentTypes}] content=${contentPreview}`);
 
 			const replyText = extractReplyText(assistantMsg);
-			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 100)) : "null"}`);
-
+			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
+			logger.info(`[dispatch] raw content[0] text="${JSON.stringify((assistantMsg.content[0] as any)?.text ?? "")}"`);
 			if (replyText) {
 				try {
 					await qqSendMessage({
