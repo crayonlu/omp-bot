@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { $env, logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
 import type { AgentSession } from "../session/agent-session";
+import { growthTools } from "./growth-tools";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,8 +71,8 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 			enableLsp: false,
 			skipPythonPreflight: true,
 			spawns: "bash",
-			systemPrompt: (defaultBlocks) => {
-				// Discard default coding-agent prompt, use bot prompt
+			customTools: growthTools,
+			systemPrompt: (_defaultBlocks) => {
 				const botPrompt = buildBotSessionPrompt(config);
 				return [botPrompt];
 			},
