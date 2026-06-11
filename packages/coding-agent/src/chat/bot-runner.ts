@@ -512,20 +512,11 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	}
 }
 function extractReplyText(msg: AssistantMessage): string | null {
-	let text = "";
-	for (const block of msg.content) {
-		if (block.type === "text" && block.text.trim()) {
-			text += block.text.trim() + "\n";
-		}
-		if (block.type === "thinking") {
-			const t = block as { thinking: string };
-			if (t.thinking?.trim()) {
-				text += t.thinking.trim() + "\n";
-			}
-		}
-	}
-	text = text.trim();
-	// If only thinking content, clean it for user-friendly output
-	// (thinking blocks often start with internal reasoning markers)
-	return text || null;
+	// Only use the last text block — earlier blocks are internal reasoning
+	const textBlocks = msg.content.filter(
+		(c: any) => c.type === "text" && c.text?.trim()
+	);
+	if (textBlocks.length === 0) return null;
+	const last = textBlocks[textBlocks.length - 1] as { text: string };
+	return last.text.trim() || null;
 }
