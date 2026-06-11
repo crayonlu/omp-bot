@@ -216,14 +216,14 @@ export async function handleDashboardRequest(req: Request): Promise<Response | n
 	if (!path.startsWith("/api/")) return null; // Not a dashboard route
 
 	try {
-		return await handleApiRoute(method, path, req);
+		return await handleApiRoute(method, path, req, url);
 	} catch (err) {
 		logger.error(`[dashboard] API error: ${err}`);
 		return Response.json({ error: String(err) }, { status: 500 });
 	}
 }
 
-async function handleApiRoute(method: string, path: string, req: Request): Promise<Response> {
+async function handleApiRoute(method: string, path: string, req: Request, url: URL): Promise<Response> {
 	switch (`${method} ${path}`) {
 		// Channels
 		case "GET /api/channels":
