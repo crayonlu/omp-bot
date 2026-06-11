@@ -494,17 +494,20 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			let replyText = extractReplyText(assistantMsg);
 			if (replyText) replyText = stripMarkdown(replyText);
 			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
-			if (replyText) {
+			// Auto-send only if Zero didn't already send messages herself
+			if (replyText && !toolCalls.includes("qq_send_message")) {
 				try {
 					await qqSendMessage({
 						target_type: targetType,
 						target_id: targetId,
 						content: replyText,
 					});
-					logger.info(`[dispatch] auto-sent reply to ${targetType}:${targetId}`);
+					logger.info(`[dispatch] auto-sent reply to ${targetType}:${targetId} (Zero didn't reply herself)`);
 				} catch (err) {
 					logger.error(`[dispatch] Failed to send reply: ${err}`);
 				}
+			} else if (replyText && toolCalls.includes("qq_send_message")) {
+				logger.info(`[dispatch] Zero already sent her own messages → skip auto-send`);
 			}
 
 			return {
