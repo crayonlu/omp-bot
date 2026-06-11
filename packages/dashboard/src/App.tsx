@@ -18,10 +18,13 @@ function App() {
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <h1 className="mb-6 text-2xl font-bold">Oh My Pi 控制台</h1>
+      <header className="mb-10 flex items-baseline justify-between">
+        <h1 className="text-lg font-semibold tracking-tight">omp-bot</h1>
+        <p className="text-xs text-muted-foreground">Zero</p>
+      </header>
       <Tabs defaultValue="overview">
-        <TabsList className="mb-6">
-          <TabsTrigger value="overview">总览</TabsTrigger>
+        <TabsList variant="line" className="border-0 gap-6 mb-8">
+          <TabsTrigger value="overview" className="data-[state=active]:font-semibold">总览</TabsTrigger>
           <TabsTrigger value="channels">频道</TabsTrigger>
           <TabsTrigger value="persona">人格</TabsTrigger>
           <TabsTrigger value="activity">活动</TabsTrigger>
