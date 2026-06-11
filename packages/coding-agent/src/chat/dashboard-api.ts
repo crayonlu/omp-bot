@@ -271,8 +271,14 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 			return Response.json(getSessionList());
 
 		// Models
+		// Models
 		case "GET /api/models":
 			return Response.json(getAvailableModels());
+		case "GET /api/model": {
+			let model = "";
+			try { model = readFileSync("/data/selected-model.txt", "utf-8").trim(); } catch {}
+			return Response.json({ model });
+		}
 		case "POST /api/model": {
 			const body = await req.json() as { model: string };
 			writeFileSync("/data/selected-model.txt", body.model, "utf-8");

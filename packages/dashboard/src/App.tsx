@@ -17,6 +17,10 @@ export default function App() {
     get<{ id: string; name: string }[]>("/api/models")
       .then(list => { setModels(list); if (list.length > 0) setCurrent(list[0].id) })
       .catch(() => {})
+    // Fetch currently selected model
+    get<{ model: string }>("/api/model")
+      .then(r => { if (r.model) setCurrent(r.model) })
+      .catch(() => {})
   }, [])
 
   return (
