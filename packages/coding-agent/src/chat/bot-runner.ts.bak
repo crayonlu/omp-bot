@@ -339,4 +339,4 @@ async function processMessageQueue(): Promise<void> {
 		setTimeout(resolve, 100);
 		await promise;
 	}
-}}
+}

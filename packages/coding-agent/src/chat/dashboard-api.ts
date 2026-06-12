@@ -320,17 +320,7 @@ function getMimeType(filePath: string): string {
 
 function serveDashboard(): Response {
 	try {
-		let html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
-		// Inject custom scrollbar styles
-		const scrollbarCSS = `<style>
-::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-track{background:var(--bg-surface,#1e1e2e)}
-::-webkit-scrollbar-thumb{background:var(--border-subtle,#383850);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:var(--accent-pink,#ff6b9d)}
-::-webkit-scrollbar-corner{background:var(--bg-surface,#1e1e2e)}
-*{scrollbar-width:thin;scrollbar-color:var(--border-subtle,#383850) var(--bg-surface,#1e1e2e)}
-</style>`;
-		html = html.replace("</head>", scrollbarCSS + "</head>");
+		const html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
 		return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 	} catch {
 		return new Response(

@@ -1,6 +1,6 @@
-import { Activity, RefreshCw } from "lucide-react";
-import type { TimeRange } from "../types";
-
+import { Activity, DollarSign, BarChart3, RefreshCw } from "lucide-react";
+import type { TimeRange, DashboardStats } from "../types";
+import { useEffect, useState } from "react";
 type Tab = "overview" | "requests" | "errors" | "models" | "costs" | "behavior";
 
 const tabs: Tab[] = ["overview", "requests", "errors", "models", "costs", "behavior"];
@@ -23,6 +23,11 @@ interface HeaderProps {
 }
 
 export function Header({ activeTab, onTabChange, onSync, syncing, timeRange, onTimeRangeChange }: HeaderProps) {
+	const [usage, setUsage] = useState<DashboardStats | null>(null);
+	useEffect(() => {
+		fetch("/api/usage").then(r => r.json()).then(d => setUsage(d)).catch(() => {});
+	}, []);
+	const o = usage?.overall;
 	return (
 		<header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-8 border-b border-[var(--border-subtle)]">
 			<div className="flex items-center gap-3">
@@ -33,6 +38,13 @@ export function Header({ activeTab, onTabChange, onSync, syncing, timeRange, onT
 					<h1 className="text-xl font-semibold text-[var(--text-primary)]">AI Usage</h1>
 					<p className="text-sm text-[var(--text-muted)]">Statistics & Analytics</p>
 				</div>
+				{o ? (
+					<div className="flex items-center gap-3 ml-4 pl-4 border-l border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]">
+						<span className="flex items-center gap-1"><DollarSign size={11} className="text-[var(--accent-green)]" /><b className="text-[var(--text-primary)]">${(o.totalCost ?? 0).toFixed(3)}</b></span>
+						<span className="flex items-center gap-1"><BarChart3 size={11} className="text-[var(--accent-cyan)]" /><b className="text-[var(--text-primary)]">{o.totalRequests ?? 0}</b></span>
+						<span className="flex items-center gap-1"><b className="text-[var(--text-primary)]">{((o.totalInputTokens ?? 0) + (o.totalOutputTokens ?? 0)) / 1000}K</b></span>
+					</div>
+				) : null}
 			</div>
 
 			<div className="flex items-center gap-3">
