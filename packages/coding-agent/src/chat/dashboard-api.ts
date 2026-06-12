@@ -320,7 +320,11 @@ function getMimeType(filePath: string): string {
 
 function serveDashboard(): Response {
 	try {
-		const html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
+		let html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
+		// Normalize asset paths: built index.html may use relative paths like
+		// src="index.js" or href="styles.css" — prefix with /assets/ so the
+		// server's static asset handler can serve them.
+		html = html.replace(/(src|href)="(?!\/|https?:\/\/)([^"]+)"/g, '$1="/assets/$2"');
 		return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 	} catch {
 		return new Response(
