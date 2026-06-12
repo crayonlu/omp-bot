@@ -511,6 +511,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 
 	// Subscribe to agent output for real-time streaming
 	let sendBuffer = "";
+	let accumulatedReply = "";
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const toolCalls: string[] = [];
 	const sessionKey = "zero";
@@ -537,6 +538,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 
 	const unsub = botSession.session.subscribe(evt => {
 		if (evt.type === "message_update" && evt.assistantMessageEvent?.type === "text_delta") {
+			accumulatedReply += evt.assistantMessageEvent.delta;
 			sendBuffer += evt.assistantMessageEvent.delta;
 			debounce();
 		}
@@ -547,21 +549,34 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 			toolCalls.push(evt.toolName);
 		}
 	});
-
+	const promptText = crashContext ? context + crashContext : context;
+	const promptImages = hasImages ? parsed.imageUrls.map(url => ({ type: "image" as const, image: url })) : undefined;
 	try {
-		const promptText = crashContext ? context + crashContext : context;
-		const promptImages = hasImages ? parsed.imageUrls.map(url => ({ type: "image" as const, image: url })) : undefined;
 		logger.info(`[dispatch] steer: ${promptText.slice(0, 100)}…`);
-		await botSession.session.prompt(promptText, promptImages ? { images: promptImages } : undefined);
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				await botSession.session.prompt(promptText, promptImages ? { images: promptImages } : undefined);
+				break;
+			} catch (err) {
+				if (String(err).includes("AgentBusyError") && attempt < 2) {
+					logger.warn(`[dispatch] Session busy (attempt ${attempt + 1}), retrying in ${(attempt + 1) * 2}s…`);
+					await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+					continue;
+				}
+				logger.error(`[dispatch] prompt failed: ${err}`);
+				break;
+			}
+		}
 	} finally {
 		flushBuffer();
 		unsub();
 		if (debounceTimer) clearTimeout(debounceTimer);
 	}
 
+	const replyText = stripMarkdown(accumulatedReply);
 	return {
-		reply: null,  // no longer collected — sent via debounce
-		silent: false,
+		reply: replyText || null,
+		silent: !replyText,
 		session_id: sessionKey,
 		tool_calls: toolCalls,
 	};
