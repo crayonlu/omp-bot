@@ -43,21 +43,23 @@ export async function dispatchPrompt(
 
 	let accumulatedReply = "";
 	const toolCalls: string[] = [];
-
-	// Subscribe to agent output
+	// Subscribe to ALL agent output events for debugging
+	const eventsReceived: string[] = [];
 	const unsub = ompSession.subscribe((evt: any) => {
+		eventsReceived.push(evt.type);
 		if (evt.type === "message_update" && evt.assistantMessageEvent?.type === "text_delta") {
 			accumulatedReply += evt.assistantMessageEvent.delta;
 			onDelta?.(evt.assistantMessageEvent.delta);
-		}
-		if (evt.type === "message_end" || evt.type === "agent_end" || evt.type === "turn_end") {
+		} else if (evt.type === "message_update") {
+			logger.debug(`[bridge] msg_update event: ameType=${evt.assistantMessageEvent?.type} hasPartial=${!!evt.assistantMessageEvent?.partial}`);
+		} else if (evt.type === "message_end" || evt.type === "agent_end" || evt.type === "turn_end") {
 			onEnd?.();
-		}
-		if (evt.type === "tool_execution_start") {
+		} else if (evt.type === "tool_execution_start") {
 			toolCalls.push(evt.toolName);
 			onToolCall?.(evt.toolName);
 		}
 	});
+	logger.info(`[bridge] subscribed, events received so far: []`);
 
 	try {
 		// Save default model so we can restore after
@@ -78,10 +80,8 @@ export async function dispatchPrompt(
 		const startTime = Date.now();
 		try {
 			const promptResult = await ompSession.prompt(options.text, promptOptions);
-			const elapsed = Date.now() - startTime;
-			logger.info(`[bridge] <<< prompt returned in ${elapsed}ms accumulatedReply=${accumulatedReply.length}b resultType=${typeof promptResult} hasContent=${!!promptResult?.content} contentLen=${(promptResult?.content as string)?.length ?? 0} toolCalls=${(promptResult?.toolCalls as any[])?.length ?? 0}`);
 			if (!accumulatedReply) {
-				logger.warn(`[bridge] Empty reply. Session state: ${JSON.stringify({status: ompSession.state?.status, mode: ompSession.mode, conversationLength: ompSession.conversation?.length, promptResultKeys: promptResult ? Object.keys(promptResult as object) : null})}`);
+				logger.warn(`[bridge] Empty reply. Events received during prompt: [${eventsReceived.join(",")}]. Session state: ${JSON.stringify({status: ompSession.state?.status, mode: ompSession.mode, conversationLength: ompSession.conversation?.length, promptResultKeys: promptResult ? Object.keys(promptResult as object) : null})}`);
 			}
 		} catch (err) {
 			const elapsed = Date.now() - startTime;
