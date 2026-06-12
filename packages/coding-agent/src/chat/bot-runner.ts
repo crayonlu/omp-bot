@@ -383,15 +383,48 @@ async function handleManualMessage(req: Request): Promise<Response> {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// OneBot Message Handler
-// ---------------------------------------------------------------------------
+// ── User Message Debounce ──
+// When the user sends multiple messages in quick succession, they are merged
+// into a single dispatch. This prevents interrupting Zero mid-thought.
+const userDebounceTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const userPendingText = new Map<number, string>();
+const USER_DEBOUNCE_MS = 600;
 
-async function handleOneBotMessage(event: OneBotMessageEvent): Promise<void> {
-	const pushed = queue.push(event);
-	logger.debug(`[ws] msg id=${event.message_id} from=${event.user_id} text="${event.raw_message.slice(0, 40)}" queued=${pushed} depth=${queue.depth}`);
+function flushUserMessages(userId: number): void {
+	const text = userPendingText.get(userId);
+	userPendingText.delete(userId);
+	userDebounceTimers.delete(userId);
+	if (!text) return;
+	// Create a synthetic message event and queue it
+	const syntheticEvent = {
+		post_type: "message" as const,
+		message_type: "private" as const,
+		sub_type: "friend",
+		message_id: Date.now(),
+		user_id: userId,
+		message: [{ type: "text" as const, data: { text } }],
+		raw_message: text,
+		sender: { user_id: userId, nickname: "先生", card: "先生" },
+		time: Math.floor(Date.now() / 1000),
+		self_id: 1447747271,
+	};
+	const pushed = queue.push(syntheticEvent);
+	logger.debug(`[debounce] flush: uid=${userId} text="${text.slice(0, 50)}" queued=${pushed} depth=${queue.depth}`);
 }
 
+function handleOneBotMessage(event: OneBotMessageEvent): void {
+	const uid = event.user_id;
+	// Accumulate message text with a debounce timer
+	const prev = userPendingText.get(uid) ?? "";
+	userPendingText.set(uid, prev ? prev + "\n" + event.raw_message : event.raw_message);
+
+	// Reset debounce timer
+	const existing = userDebounceTimers.get(uid);
+	if (existing) clearTimeout(existing);
+	userDebounceTimers.set(uid, setTimeout(() => flushUserMessages(uid), USER_DEBOUNCE_MS));
+
+	logger.debug(`[ws] msg id=${event.message_id} accumulated text len=${(prev + "\n" + event.raw_message).length} debounce=${USER_DEBOUNCE_MS}ms`);
+}
 // ---------------------------------------------------------------------------
 // Message Processing Loop
 // ---------------------------------------------------------------------------

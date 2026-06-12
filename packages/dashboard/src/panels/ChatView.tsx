@@ -35,7 +35,7 @@ export default function ChatView({ wsMessage }: { wsMessage: WSMessage | null })
       const userMsg: Message = {
         id: `user-${Date.now()}`,
         role: "user",
-        content: entry.message?.slice(0, 300),
+        content: entry.message || "(image or other)",
         time: new Date(entry.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
       }
       // Bot's reply (if present)
