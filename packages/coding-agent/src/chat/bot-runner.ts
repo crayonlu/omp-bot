@@ -141,25 +141,9 @@ try {
 		broadcast({ type: "session", key, active });
 	});
 
-	// Wire model change → apply to all running sessions
+	// Wire model change → store in config for next session (runtime switch unreliable)
 	setModelChangeHandler(async (modelId: string) => {
-		// Apply to global session
-		const gs = (await import("./session-manager")).globalSession;
-		if (gs) {
-			try {
-				const isVision = modelId.includes("minimax");
-				await gs.session.setModelTemporary({
-					id: modelId,
-					provider: "ppio",
-					api: "openai-completions",
-					baseUrl: "https://api.ppio.com/openai",
-					input: isVision ? ["text", "image"] as const : ["text"] as const,
-				} as any);
-				logger.info(`[api] Applied model ${modelId} to global session`);
-			} catch (err) {
-				logger.warn(`[api] Failed to apply model ${modelId}: ${err}`);
-			}
-		}
+		logger.info(`[api] Model ${modelId} saved to config (applied to next session)`);
 	});
 
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
