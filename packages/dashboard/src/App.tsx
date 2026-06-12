@@ -19,13 +19,25 @@ export default function App() {
       .catch(() => {})
   }, [])
 
+  const [usage, setUsage] = useState<{ cost: string; reqs: number } | null>(null)
+  useEffect(() => {
+    fetch("/api/usage").then(r => r.json()).then(d => {
+      const o = d.overall || {}
+      setUsage({ cost: (o.totalCost || 0).toFixed(3), reqs: o.totalRequests || 0 })
+    }).catch(() => {})
+  }, [])
+
   return (
     <div className="mx-auto flex h-dvh max-w-2xl flex-col px-4 py-3">
-      {/* Header */}
       <header className="flex shrink-0 items-center justify-between pb-3">
         <div className="flex items-center gap-2">
           <h1 className="text-sm font-semibold tracking-tight">omp-bot</h1>
           <span className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-red-500"}`} />
+          {usage && (
+            <span className="ml-2 text-[11px] text-muted-foreground">
+              ${usage.cost} / {usage.reqs} reqs
+            </span>
+          )}
         </div>
         <select
           value={current}
