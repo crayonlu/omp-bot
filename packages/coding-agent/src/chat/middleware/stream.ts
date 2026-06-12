@@ -19,7 +19,6 @@ export class StreamManager {
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private sendFn: SendFn;
 	private debounceMs: number;
-	private flushed = false;
 	private finalFlush = false;
 
 	constructor(sendFn: SendFn, debounceMs = 800) {
@@ -49,9 +48,12 @@ export class StreamManager {
 		this.flush(true);
 	}
 
-	/** Flush on tool call — send what we have so far (at sentence boundary) */
+	/** Flush on tool call — send whatever we have, even mid-sentence. */
 	onToolCall(): void {
-		this.flush(false);
+		this.sendBuffer = this.sendBuffer.trim();
+		if (this.sendBuffer) {
+			this.flush(true);
+		}
 	}
 
 	/** Get accumulated text so far */
