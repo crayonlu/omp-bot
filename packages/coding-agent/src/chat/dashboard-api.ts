@@ -178,7 +178,7 @@ export async function handleDashboardRequest(req: Request): Promise<Response | n
 
 	// Dashboard HTML
 	if (method === "GET" && (path === "/dashboard" || path === "/")) {
-		return await serveDashboard();
+		return serveDashboard();
 	}
 
 
@@ -318,33 +318,19 @@ function getMimeType(filePath: string): string {
 	return MIME_TYPES[ext] ?? "application/octet-stream";
 }
 
-async function serveDashboard(): Promise<Response> {
+function serveDashboard(): Response {
 	try {
 		let html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
-
-		// Inject usage summary before React mount
-		try {
-			const { $ } = await import("bun");
-			const result = await $`/usr/local/bin/omp stats --json`.quiet().nothrow();
-			if (result.exitCode === 0) {
-				const text = result.text();
-				const jsonStart = text.indexOf("{");
-				if (jsonStart >= 0) {
-					const stats = JSON.parse(text.slice(jsonStart));
-					const o = stats.overall ?? {};
-					const cost = (o.totalCost ?? 0).toFixed(3);
-					const reqs = o.totalRequests ?? 0;
-					const toks = ((o.totalInputTokens ?? 0) + (o.totalOutputTokens ?? 0)) / 1000;
-					const banner = `<div style="background:#1a1a2e;color:#e0e0e0;padding:8px 16px;font:14px/1.5 monospace;border-bottom:1px solid #333;display:flex;gap:24px;flex-wrap:wrap">
-<span>💰 <b>$${cost}</b></span>
-<span>📨 ${reqs} reqs</span>
-<span>📝 ${toks.toFixed(0)}K tokens</span>
-</div>`;
-					html = html.replace('<div id="root"></div>', banner + '<div id="root"></div>');
-				}
-			}
-		} catch {}
-
+		// Inject custom scrollbar styles
+		const scrollbarCSS = `<style>
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg-surface,#1e1e2e)}
+::-webkit-scrollbar-thumb{background:var(--border-subtle,#383850);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent-pink,#ff6b9d)}
+::-webkit-scrollbar-corner{background:var(--bg-surface,#1e1e2e)}
+*{scrollbar-width:thin;scrollbar-color:var(--border-subtle,#383850) var(--bg-surface,#1e1e2e)}
+</style>`;
+		html = html.replace("</head>", scrollbarCSS + "</head>");
 		return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 	} catch {
 		return new Response(

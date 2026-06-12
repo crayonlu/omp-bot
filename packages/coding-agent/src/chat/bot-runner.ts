@@ -173,6 +173,20 @@ try {
 
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
 	startCleanupTimer();
+
+	// Start OMP stats server for dashboard (port 3847, background)
+	(async () => {
+		try {
+			const statsProc = Bun.spawn(["/usr/local/bin/omp", "stats", "--port", "3847"], {
+				stdout: "ignore",
+				stderr: "ignore",
+			});
+			statsProc.unref();
+			logger.info("[bot] OMP stats server started on port 3847");
+		} catch (err) {
+			logger.warn(`[bot] Failed to start OMP stats server: ${err}`);
+		}
+	})();
 	processMessageQueue();
 
 	setInterval(() => {
@@ -188,10 +202,6 @@ try {
 			errorsToday: today.filter(e => e.decision === "error").length,
 		}});
 	}, 30_000).unref();
-
-	await new Promise(() => {});
-}
-
 // ---------------------------------------------------------------------------
 // HTTP Handler
 // ---------------------------------------------------------------------------
@@ -201,6 +211,21 @@ async function handleHttpRequest(req: Request): Promise<Response> {
 
 	if (path === "/favicon.ico" || path === "/favicon.svg") {
 		return new Response("", { status: 204 });
+	}
+
+	// Proxy OMP stats API calls to the stats server (before dashboard handler
+	// because handleDashboardRequest would reject /api/stats/* as unknown routes).
+	if (path.startsWith("/api/stats") || path === "/api/sync" || path.startsWith("/api/request/") || path.startsWith("/api/requests/")) {
+		try {
+			const targetUrl = `http://127.0.0.1:3847${path}${url.search}`;
+			const proxyResp = await fetch(targetUrl, { method: req.method, headers: { "accept": "application/json" } });
+			return new Response(proxyResp.body, {
+				status: proxyResp.status,
+				headers: { "content-type": proxyResp.headers.get("content-type") ?? "application/json" },
+			});
+		} catch {
+			return new Response("Stats server unavailable", { status: 502 });
+		}
 	}
 
 	const dashboardResp = await handleDashboardRequest(req);
@@ -310,6 +335,8 @@ async function processMessageQueue(): Promise<void> {
 				}
 			}
 		}
-		await new Promise(r => setTimeout(r, 100));
+		const { promise, resolve } = Promise.withResolvers<void>();
+		setTimeout(resolve, 100);
+		await promise;
 	}
 }
