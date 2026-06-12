@@ -100,9 +100,10 @@ const sessions = new Map<string, BotSession>();
 
 // ── Force-save session path (call after first message is processed) ──
 export function saveSessionFilePath(): void {
-	if (!globalSession) return;
+	if (!globalSession) { logger.warn(`[bot-session] saveSessionFilePath: globalSession is null`); return; }
 	try {
 		const sessionFile = globalSession.session.sessionFile;
+		logger.info(`[bot-session] saveSessionFilePath: sessionFile=${sessionFile}`);
 		if (sessionFile) {
 			writeFileSync("/data/last-session-zero.path", String(sessionFile), "utf-8");
 			logger.info(`[bot-session] Saved session file: ${sessionFile}`);
