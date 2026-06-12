@@ -15,6 +15,18 @@ let onModelChange: ((modelId: string) => void) | null = null;
 export function setModelChangeHandler(handler: (modelId: string) => void): void {
 	onModelChange = handler;
 }
+
+// ---------------------------------------------------------------------------
+// Usage / cost tracker (in-memory, updated by pipeline after each prompt)
+// ---------------------------------------------------------------------------
+
+let cumulativeUsage = { totalCost: 0, totalRequests: 0, totalInputTokens: 0, totalOutputTokens: 0 };
+export function addUsage(u: { cost: number; inputTokens: number; outputTokens: number }): void {
+	cumulativeUsage.totalCost += u.cost;
+	cumulativeUsage.totalRequests++;
+	cumulativeUsage.totalInputTokens += u.inputTokens;
+	cumulativeUsage.totalOutputTokens += u.outputTokens;
+}
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -244,13 +256,15 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 			return Response.json(friends);
 		}
 
-		// Groups list
 		case "GET /api/groups": {
 			const groups = await fetchGroups();
 			return Response.json(groups);
 		}
 
-		// Overview (aggregated stats)
+		case "GET /api/usage":
+			return Response.json({ overall: cumulativeUsage });
+
+		case "GET /api/health":
 		case "GET /api/overview": {
 			const activity = getRecentActivity(200);
 			const now = new Date();

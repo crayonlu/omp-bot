@@ -14,6 +14,7 @@ import { selectModel } from "./model-manager";
 import { dispatchPrompt } from "./session-bridge";
 import { StreamManager } from "./stream";
 import { sendReply } from "./respond";
+import { addUsage } from "../dashboard-api";
 import type { DispatchResult, InternalMessage } from "./types";
 import type { BotSession } from "../session-manager";
 import type { OneBotMessageEvent } from "../onebot-gateway";
@@ -121,6 +122,22 @@ export class MessagePipeline {
 				reason: replyText ? "replied" : "no response text",
 				reply: replyText?.slice(0, 200),
 			};
+
+			// Track usage/cost from the session's last assistant message
+			const messages = session.session?.messages;
+			if (messages) {
+				for (let i = messages.length - 1; i >= 0; i--) {
+					const msg = messages[i] as any;
+					if (msg.role === "assistant" && msg.usage) {
+						addUsage({
+							cost: (msg.usage as any)?.cost?.total ?? 0,
+							inputTokens: (msg.usage as any)?.input ?? 0,
+							outputTokens: (msg.usage as any)?.output ?? 0,
+						});
+						break;
+					}
+				}
+			}
 			this.activityCallback?.(entry);
 
 			return {
