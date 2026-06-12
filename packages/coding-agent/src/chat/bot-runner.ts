@@ -609,6 +609,7 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	});
 	const promptText = crashContext ? context + crashContext : context;
 	const promptImages = hasImages ? parsed.imageUrls.map(url => ({ type: "image" as const, image: url })) : undefined;
+	logger.info(`[dispatch] images=${promptImages ? promptImages.length : 0}`);
 	try {
 		logger.info(`[dispatch] steer: ${promptText.slice(0, 100)}…`);
 		for (let attempt = 0; attempt < 3; attempt++) {
