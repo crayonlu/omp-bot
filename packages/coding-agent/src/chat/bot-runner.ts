@@ -143,14 +143,21 @@ try {
 
 	// Wire model change → apply to all running sessions
 	setModelChangeHandler(async (modelId: string) => {
-		const sessions = listBotSessions();
-		for (const bs of sessions) {
+		// Apply to global session
+		const gs = (await import("./session-manager")).globalSession;
+		if (gs) {
 			try {
-				// The session stores model as "provider/modelId" format
-				await bs.session.setModelTemporary({ id: modelId, provider: "ppio", api: "openai-completions", baseUrl: "https://api.ppio.com/openai" } as any);
-				logger.info(`[api] Applied model ${modelId} to session ${bs.sessionKey}`);
+				const isVision = modelId.includes("minimax");
+				await gs.session.setModelTemporary({
+					id: modelId,
+					provider: "ppio",
+					api: "openai-completions",
+					baseUrl: "https://api.ppio.com/openai",
+					input: isVision ? ["text", "image"] as const : ["text"] as const,
+				} as any);
+				logger.info(`[api] Applied model ${modelId} to global session`);
 			} catch (err) {
-				logger.warn(`[api] Failed to apply model ${modelId} to session ${bs.sessionKey}: ${err}`);
+				logger.warn(`[api] Failed to apply model ${modelId}: ${err}`);
 			}
 		}
 	});
