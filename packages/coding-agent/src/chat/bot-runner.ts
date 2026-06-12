@@ -384,46 +384,58 @@ async function handleManualMessage(req: Request): Promise<Response> {
 }
 
 // ── User Message Debounce ──
-// When the user sends multiple messages in quick succession, they are merged
-// into a single dispatch. This prevents interrupting Zero mid-thought.
+// Accumulates full event objects (preserving CQ segments for media).
+// When timer fires, merges all events into one with combined segments.
 const userDebounceTimers = new Map<number, ReturnType<typeof setTimeout>>();
-const userPendingText = new Map<number, string>();
+const userPendingEvents = new Map<number, OneBotMessageEvent[]>();
 const USER_DEBOUNCE_MS = 600;
 
-function flushUserMessages(userId: number): void {
-	const text = userPendingText.get(userId);
-	userPendingText.delete(userId);
-	userDebounceTimers.delete(userId);
-	if (!text) return;
-	// Create a synthetic message event and queue it
-	const syntheticEvent = {
-		post_type: "message" as const,
-		message_type: "private" as const,
-		sub_type: "friend",
+function flushUserMessages(uid: number): void {
+	const events = userPendingEvents.get(uid);
+	userPendingEvents.delete(uid);
+	userDebounceTimers.delete(uid);
+	if (!events || events.length === 0) return;
+
+	// Merge all events: concatenate text segments, preserve non-text segments
+	const merged: OneBotMessageEvent = {
+		...events[0],
 		message_id: Date.now(),
-		user_id: userId,
-		message: [{ type: "text" as const, data: { text } }],
-		raw_message: text,
-		sender: { user_id: userId, nickname: "先生", card: "先生" },
-		time: Math.floor(Date.now() / 1000),
-		self_id: 1447747271,
+		raw_message: events.map(e => e.raw_message).join("\n"),
+		message: events.flatMap(e => mergeCqSegments(e.message)),
 	};
-	const pushed = queue.push(syntheticEvent);
-	logger.debug(`[debounce] flush: uid=${userId} text="${text.slice(0, 50)}" queued=${pushed} depth=${queue.depth}`);
+
+	const pushed = queue.push(merged);
+	logger.debug(`[debounce] flush ${events.length} msg(s) uid=${uid} queued=${pushed} depth=${queue.depth}`);
+}
+
+/** Merge CQ segments: combine consecutive text segments, keep other types. */
+function mergeCqSegments(segments: import("./onebot-types").MessageSegment[]): import("./onebot-types").MessageSegment[] {
+	const result: import("./onebot-types").MessageSegment[] = [];
+	for (const seg of segments) {
+		const last = result[result.length - 1];
+		if (seg.type === "text" && last?.type === "text") {
+			(last as any).data.text += (seg as any).data.text;
+		} else {
+			result.push(seg);
+		}
+	}
+	return result;
 }
 
 function handleOneBotMessage(event: OneBotMessageEvent): void {
 	const uid = event.user_id;
-	// Accumulate message text with a debounce timer
-	const prev = userPendingText.get(uid) ?? "";
-	userPendingText.set(uid, prev ? prev + "\n" + event.raw_message : event.raw_message);
+
+	// Accumulate the full event object (preserves CQ segments)
+	const prev = userPendingEvents.get(uid) ?? [];
+	prev.push(event);
+	userPendingEvents.set(uid, prev);
 
 	// Reset debounce timer
 	const existing = userDebounceTimers.get(uid);
 	if (existing) clearTimeout(existing);
 	userDebounceTimers.set(uid, setTimeout(() => flushUserMessages(uid), USER_DEBOUNCE_MS));
 
-	logger.debug(`[ws] msg id=${event.message_id} accumulated text len=${(prev + "\n" + event.raw_message).length} debounce=${USER_DEBOUNCE_MS}ms`);
+	logger.debug(`[ws] msg id=${event.message_id} accumulated ${prev.length} event(s)`);
 }
 // ---------------------------------------------------------------------------
 // Message Processing Loop
