@@ -41,9 +41,7 @@ export async function ensureGlobalSession(): Promise<BotSession> {
 	if (globalSession) return globalSession;
 
 	const workspaceDir = "/omp-bot-workspace/zero";
-	const agentDir = "/data/.omp/agent";
 	mkdirSync(workspaceDir, { recursive: true });
-	mkdirSync(agentDir, { recursive: true });
 
 	// Try to restore previous session from saved file path
 	const recoveryPath = "/data/last-session-zero.path";
@@ -66,7 +64,6 @@ export async function ensureGlobalSession(): Promise<BotSession> {
 	try {
 		const sessionOpts: CreateAgentSessionOptions = {
 			cwd: workspaceDir,
-			agentDir: agentDir,
 			enableLsp: false,
 			skipPythonPreflight: true,
 			spawns: "bash",
