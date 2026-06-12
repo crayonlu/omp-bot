@@ -30,7 +30,7 @@ export function setEchoRegisterer(registerer: (echo: string) => Promise<unknown>
 // Internal: send an API action and wait for the echoed response
 // ---------------------------------------------------------------------------
 
-function sendAction(
+export function sendAction(
 	action: string,
 	params: Record<string, unknown> = {},
 	echo: string,

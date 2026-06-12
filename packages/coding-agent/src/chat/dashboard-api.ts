@@ -148,36 +148,6 @@ export function setPromptOverride(prompt: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Model Config
-// ---------------------------------------------------------------------------
-
-export function getAvailableModels(): Array<{ id: string; name: string }> {
-	// Parse from OMP models config
-	try {
-		const modelsPath = resolve(process.env.HOME ?? "/root", ".omp/agent/models.yml");
-		if (!existsSync(modelsPath)) return [];
-		const raw = readFileSync(modelsPath, "utf-8");
-		// Simple YAML line parsing (no external dep needed)
-		const models: Array<{ id: string; name: string }> = [];
-		let currentId = "";
-		for (const line of raw.split("\n")) {
-			const idMatch = line.match(/^\s*- id:\s*(.+)/);
-			if (idMatch) {
-				currentId = idMatch[1].trim();
-				models.push({ id: currentId, name: currentId });
-			}
-			const nameMatch = line.match(/^\s*name:\s*(.+)/);
-			if (nameMatch && models.length > 0) {
-				models[models.length - 1].name = nameMatch[1].trim();
-			}
-		}
-		return models;
-	} catch {
-		return [];
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Session List
 // ---------------------------------------------------------------------------
 
@@ -269,20 +239,6 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 		case "GET /api/sessions":
 			return Response.json(getSessionList());
 
-		// Models
-		case "GET /api/models":
-			return Response.json(getAvailableModels());
-		case "GET /api/model": {
-			const cfg = getConfig();
-			return Response.json({ model: cfg.model });
-		}
-		case "POST /api/model": {
-			const body = await req.json() as { model: string };
-			saveConfig({ model: body.model });
-			onModelChange?.(body.model);
-			logger.info(`[api] Model switched to ${body.model}`);
-			return Response.json({ ok: true });
-		}
 		case "GET /api/friends": {
 			const friends = await fetchFriends();
 			return Response.json(friends);
