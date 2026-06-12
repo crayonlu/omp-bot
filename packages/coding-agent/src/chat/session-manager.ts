@@ -13,6 +13,8 @@ import type { AgentSession } from "../session/agent-session";
 import { SessionManager } from "../session/session-manager";
 import { growthTools } from "./growth-tools";
 import { qqTools } from "./qq-tools";
+import { BOT_SYSTEM_PROMPT } from "./bot-prompt";
+import { getPromptOverride } from "./dashboard-api";
 
 export interface BotSessionConfig {
 	targetType: "private" | "group";
@@ -31,6 +33,46 @@ export interface BotSession {
 
 // ---------------------------------------------------------------------------
 // Session Storage
+
+// ── Global Session (single person, single session) ──
+export let globalSession: BotSession | null = null;
+
+export async function ensureGlobalSession(): Promise<BotSession> {
+	if (globalSession) return globalSession;
+	logger.info(`[bot-session] Creating global session`);
+	const workspaceDir = "/omp-bot-workspace/zero";
+	mkdirSync(workspaceDir, { recursive: true });
+	const prevProjectDir = getProjectDir();
+	setProjectDir(workspaceDir);
+	try {
+		const sessionOpts: CreateAgentSessionOptions = {
+			cwd: workspaceDir,
+			enableLsp: false,
+			skipPythonPreflight: true,
+			spawns: "bash",
+			customTools: [...growthTools, ...qqTools],
+			systemPrompt: (_defaultBlocks) => {
+				const botPrompt = BOT_SYSTEM_PROMPT;
+				const override = getPromptOverride();
+				return [override ?? botPrompt];
+			},
+		};
+		const { createAgentSession } = await import("../sdk");
+		const result = await createAgentSession(sessionOpts);
+		globalSession = {
+			sessionKey: "zero",
+			config: { targetType: "private", targetId: 0, userName: "Global" },
+			session: result.session,
+			workspaceDir,
+			createdAt: Date.now(),
+			lastActivity: Date.now(),
+		};
+		logger.info(`[bot-session] Global session created at ${workspaceDir}`);
+		return globalSession;
+	} finally {
+		setProjectDir(prevProjectDir);
+	}
+}
 // ---------------------------------------------------------------------------
 
 const sessions = new Map<string, BotSession>();

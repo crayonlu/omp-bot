@@ -489,124 +489,82 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		};
 	}
 
+	// Build context with message source prefix
 	const context = buildMessageContext(parsed, event);
 	const hasImages = parsed.imageUrls.length > 0;
 
-	const targetType = event.message_type;
-	const targetId = targetType === "group" ? event.group_id! : event.user_id;
-	const sessionKey = `${targetType}:${targetId}`;
-	// Get or create session (recreate if previous was disposed by shutdown)
-	let botSession = getBotSession(sessionKey);
-	if (botSession) {
-		try {
-			// Test if session is alive by checking its state
-			botSession.session.state;
-		} catch {
-			logger.warn(`[dispatch] Session ${sessionKey} was disposed — recreating`);
-			await destroyBotSession(sessionKey);
-			botSession = null;
-		}
-	}
-	if (!botSession) {
-		const config: BotSessionConfig = {
-			targetType,
-			targetId,
-			userName: event.sender.card || event.sender.nickname,
-		};
-		botSession = await createBotSession(sessionKey, config);
-	}
-	// Session recovery: check for a saved session file from a previous process life
+	// Inject crash marker info for self-recovery
+	let crashContext = "";
 	try {
-		const recoveryPath = `/data/last-session-${sessionKey}.path`;
-		if (existsSync(recoveryPath)) {
-			const savedPath = readFileSync(recoveryPath, "utf-8").trim();
-			logger.info(`[dispatch] Found saved session file for ${sessionKey}: ${savedPath} — future: use SessionManager.open() to restore`);
+		if (existsSync("/data/crash-marker.txt")) {
+			crashContext = `\n\n[SYSTEM] Previous session crashed: ${readFileSync("/data/crash-marker.txt", "utf-8").slice(0, 400)}`;
+			unlinkSync("/data/crash-marker.txt");
 		}
 	} catch {}
-	// Dispatch to agent
+
+	// Use global session (created at startup)
+	const { globalSession, ensureGlobalSession } = await import("./session-manager");
+	let botSession = globalSession;
+	if (!botSession) {
+		botSession = await ensureGlobalSession();
+	}
+
+	// Subscribe to agent output for real-time streaming
+	let sendBuffer = "";
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const toolCalls: string[] = [];
+	const sessionKey = "zero";
+
+	const flushBuffer = async () => {
+		const text = sendBuffer.trim();
+		if (!text) return;
+		sendBuffer = "";
+		try {
+			const cleaned = stripMarkdown(text);
+			if (cleaned) {
+				await qqSendMessage({ target_type: "private", target_id: 1104507145, content: cleaned });
+				logger.info(`[debounce] sent: ${cleaned.slice(0, 80)}`);
+			}
+		} catch (err) {
+			logger.error(`[debounce] send failed: ${err}`);
+		}
+	};
+
+	const debounce = () => {
+		if (debounceTimer) clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(flushBuffer, 800);
+	};
+
 	const unsub = botSession.session.subscribe(evt => {
+		if (evt.type === "message_update" && evt.assistantMessageEvent?.type === "text_delta") {
+			sendBuffer += evt.assistantMessageEvent.delta;
+			debounce();
+		}
+		if (evt.type === "message_end" || evt.type === "agent_end" || evt.type === "turn_end") {
+			flushBuffer();
+		}
 		if (evt.type === "tool_execution_start") {
 			toolCalls.push(evt.toolName);
 		}
 	});
-	const promptText = context;
 
-	const promptImages = hasImages
-		? parsed.imageUrls.map(url => ({ type: "image" as const, image: url }))
-		: undefined;
-
-	logger.info(`[dispatch] session prompt: ${promptText.slice(0, 120)}…${hasImages ? ` +${parsed.imageUrls.length} image(s)` : ""}`);
 	try {
+		const promptText = crashContext ? context + crashContext : context;
+		const promptImages = hasImages ? parsed.imageUrls.map(url => ({ type: "image" as const, image: url })) : undefined;
+		logger.info(`[dispatch] steer: ${promptText.slice(0, 100)}…`);
 		await botSession.session.prompt(promptText, promptImages ? { images: promptImages } : undefined);
-
-		const state = botSession.session.state;
-		const msgCount = state.messages.length;
-		logger.info(`[dispatch] session state has ${msgCount} messages`);
-
-		// Auto-summarize every 5 turns
-		if (msgCount > 5 && msgCount % 5 === 0) {
-			logger.info(`[dispatch] ${msgCount} messages reached — injecting memory summary`);
-			try {
-				const summaryPrompt = `[SYSTEM] This conversation has reached ${msgCount} messages. Summarize key points discussed, decisions made, and preferences expressed into /workspace/memory.md. Keep it concise.`;
-				await botSession.session.prompt(summaryPrompt);
-			} catch (sumErr) {
-				logger.warn(`[dispatch] memory summary injection failed: ${sumErr}`);
-			}
-		}
-		const lastMsg = state.messages[msgCount - 1];
-
-		if (lastMsg?.role === "assistant") {
-			const assistantMsg = lastMsg as AssistantMessage;
-			logger.info(`[dispatch] FULL assistant: ${JSON.stringify({
-				role: assistantMsg.role,
-				contentCount: assistantMsg.content.length,
-				model: (assistantMsg as any).model,
-				attribution: (assistantMsg as any).attribution,
-				content: assistantMsg.content.map(c => ({type: (c as any).type, hasText: !!((c as any)?.text?.trim())}))
-			}).slice(0, 400)}`);
-			let replyText = extractReplyText(assistantMsg);
-			if (replyText) replyText = stripMarkdown(replyText);
-			logger.info(`[dispatch] extractReplyText returned: ${replyText ? JSON.stringify(replyText.slice(0, 200)) : "null"}`);
-			// Auto-send only if Zero didn't already send messages herself
-			if (replyText && !toolCalls.includes("qq_send_message")) {
-				try {
-					await qqSendMessage({
-						target_type: targetType,
-						target_id: targetId,
-						content: replyText,
-					});
-					logger.info(`[dispatch] auto-sent reply to ${targetType}:${targetId} (Zero didn't reply herself)`);
-				} catch (err) {
-					logger.error(`[dispatch] Failed to send reply: ${err}`);
-				}
-			} else if (replyText && toolCalls.includes("qq_send_message")) {
-				logger.info(`[dispatch] Zero already sent her own messages → skip auto-send`);
-			}
-
-			return {
-				reply: replyText,
-				silent: replyText === null,
-				session_id: sessionKey,
-				tool_calls: toolCalls,
-				trigger_reason: decision.reason,
-			};
-		}
-
-		logger.info(`[dispatch] last message role is "${lastMsg?.role}", not assistant. full state messages: ${msgCount}`);
-		return {
-			reply: null,
-			silent: true,
-			session_id: sessionKey,
-			tool_calls: toolCalls,
-			trigger_reason: decision.reason,
-		};
 	} finally {
+		flushBuffer();
 		unsub();
-		if (botSession) {
-			botSession.lastActivity = Date.now();
-		}
+		if (debounceTimer) clearTimeout(debounceTimer);
 	}
+
+	return {
+		reply: null,  // no longer collected — sent via debounce
+		silent: false,
+		session_id: sessionKey,
+		tool_calls: toolCalls,
+	};
 }
 
 function stripMarkdown(text: string): string {
