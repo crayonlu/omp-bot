@@ -198,5 +198,73 @@ export const qqSendMessageTool: CustomTool = {
 		return { content: [{ type: "text" as const, text: `sent: ${text.slice(0, 80)}` }] };
 	},
 };
+export const qqSendImageTool: CustomTool = {
+	name: "qq_send_image",
+	label: "Send QQ Image",
+	description:
+		"Send an image to 先生's QQ. " +
+		"Provide either a local file path (image_path) or a public URL (image_url). " +
+		"Local files are automatically read and base64-encoded. " +
+		"Use this to share screenshots, downloaded images, or generated pictures.",
+	parameters: {
+		type: "object",
+		properties: {
+			image_path: {
+				type: "string",
+				description: "Absolute path to a local image file on the server (e.g. /workspace/screenshot.png). Mutually exclusive with image_url.",
+			},
+			image_url: {
+				type: "string",
+				description: "Public URL of the image (e.g. https://example.com/pic.jpg). Mutually exclusive with image_path.",
+			},
+			caption: {
+				type: "string",
+				description: "Optional text caption to include before the image.",
+			},
+		},
+	},
+	async execute(
+		_toolCallId: string,
+		params: { image_path?: string; image_url?: string; caption?: string },
+		_onUpdate: any,
+		_ctx: CustomToolContext,
+	) {
+		const { image_path, image_url, caption } = params;
+		if (!image_path && !image_url) {
+			return { content: [{ type: "text" as const, text: "Provide either image_path or image_url" }], isError: true };
+		}
 
-export const qqTools: CustomTool[] = [qqSendMessageTool];
+		let fileCq: string;
+		if (image_path) {
+			// Read local file and base64-encode it
+			try {
+				const file = Bun.file(image_path);
+				const exists = await file.exists();
+				if (!exists) {
+					return { content: [{ type: "text" as const, text: `File not found: ${image_path}` }], isError: true };
+				}
+				const buf = await file.arrayBuffer();
+				const b64 = Buffer.from(buf).toString("base64");
+				fileCq = `[CQ:image,file=base64://${b64}]`;
+				logger.info(`[qq-tool] qq_send_image: local file=${image_path} size=${(buf.byteLength / 1024).toFixed(0)}KB`);
+			} catch (err) {
+				return { content: [{ type: "text" as const, text: `Failed to read image: ${err}` }], isError: true };
+			}
+		} else {
+			// Use URL directly
+			fileCq = `[CQ:image,file=${image_url}]`;
+			logger.info(`[qq-tool] qq_send_image: url=${image_url!.slice(0, 80)}`);
+		}
+
+		const message = caption ? `${caption}\n${fileCq}` : fileCq;
+		await qqSendMessage({
+			target_type: "private",
+			target_id: 1104507145,
+			content: message,
+		});
+
+		return { content: [{ type: "text" as const, text: `Image sent to QQ${caption ? ` with caption: ${caption.slice(0, 60)}` : ""}` }] };
+	},
+};
+
+export const qqTools: CustomTool[] = [qqSendMessageTool, qqSendImageTool];
