@@ -77,13 +77,11 @@ export async function dispatchPrompt(
 		logger.info(`[bridge] >>> calling ompSession.prompt() text_len=${options.text.length} images=${promptOptions?.images?.length ?? 0}`);
 		const startTime = Date.now();
 		try {
-			await ompSession.prompt(options.text, promptOptions);
+			const promptResult = await ompSession.prompt(options.text, promptOptions);
 			const elapsed = Date.now() - startTime;
-			logger.info(`[bridge] <<< prompt returned in ${elapsed}ms accumulatedReply=${accumulatedReply.length}b`);
-			if (!accumulatedReply && elapsed < 5000) {
-				logger.warn(`[bridge] Fast empty return! elapsed=${elapsed}ms — model may not be responding. session state: ${ompSession.state?.status ?? "unknown"}`);
-				// Log the session model to verify it's set
-				logger.info(`[bridge] session model: ${JSON.stringify(ompSession.model?.id)} agent model: ${JSON.stringify(ompSession.agent?.state?.model?.id)}`);
+			logger.info(`[bridge] <<< prompt returned in ${elapsed}ms accumulatedReply=${accumulatedReply.length}b resultType=${typeof promptResult} hasContent=${!!promptResult?.content} contentLen=${(promptResult?.content as string)?.length ?? 0} toolCalls=${(promptResult?.toolCalls as any[])?.length ?? 0}`);
+			if (!accumulatedReply) {
+				logger.warn(`[bridge] Empty reply. Session state: ${JSON.stringify({status: ompSession.state?.status, mode: ompSession.mode, conversationLength: ompSession.conversation?.length, promptResultKeys: promptResult ? Object.keys(promptResult as object) : null})}`);
 			}
 		} catch (err) {
 			const elapsed = Date.now() - startTime;
