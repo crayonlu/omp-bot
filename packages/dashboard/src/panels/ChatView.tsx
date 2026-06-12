@@ -17,12 +17,24 @@ export default function ChatView({ wsMessage }: { wsMessage: WSMessage | null })
     fetch("/api/activity?limit=50")
       .then(r => r.json())
       .then((list: any[]) => {
-        setMsgs(list.map((m, i) => ({
-          id: `${m.timestamp}-${i}`,
-          role: m.decision === "skipped" ? "user" : "assistant",
-          content: m.reply ? m.reply.slice(0, 200) : m.message.slice(0, 200),
-          time: new Date(m.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-        })))
+        const flat: Message[] = []
+        for (const m of list) {
+          flat.push({
+            id: `user-${m.timestamp}`,
+            role: "user",
+            content: m.message ? m.message.slice(0, 200) : "(image or other)",
+            time: new Date(m.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+          })
+          if (m.decision === "replied" && m.reply) {
+            flat.push({
+              id: `bot-${m.timestamp}`,
+              role: "assistant",
+              content: m.reply.slice(0, 200),
+              time: new Date(m.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+            })
+          }
+        }
+        setMsgs(flat)
       })
       .catch(() => {})
   }, [])

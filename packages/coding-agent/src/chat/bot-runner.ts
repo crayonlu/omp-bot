@@ -15,7 +15,7 @@ import { MessageQueue } from "./message-queue";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { qqSendMessage, setWsSender, setEchoRegisterer } from "./qq-tools";
 import { handleDashboardRequest, logActivity, getRecentActivity, getChannelConfigs, getSessionList, setModelChangeHandler } from "./dashboard-api";
-import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, onSessionChange, listBotSessions, type BotSessionConfig } from "./session-manager";
+import { getBotSession, createBotSession, destroyBotSession, startCleanupTimer, onSessionChange, listBotSessions, type BotSessionConfig, globalSession, ensureGlobalSession, saveSessionFilePath } from "./session-manager";
 
 export interface ChatMessageResponse {
 	tool_calls: string[];
@@ -452,7 +452,8 @@ async function processMessageQueue(): Promise<void> {
 			if (msg) {
 				try {
 					const result = await dispatchMessage(msg.event);
-					// Log activity
+					// Save session file path after first successful dispatch
+					saveSessionFilePath();
 					const targetType = msg.event.message_type;
 					const targetId = targetType === "group" ? msg.event.group_id! : msg.event.user_id;
 					logActivity({
