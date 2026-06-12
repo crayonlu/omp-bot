@@ -1,14 +1,13 @@
 /**
  * Ring buffer message queue.
  *
- * Survives WebSocket disconnects by buffering messages in memory.
- * Tracks sequence IDs for replay detection.
+ * Tracks recent message IDs in a Set for deduplication.
+ * No monotonic ID assumption — QQ message_ids are not sequential.
  */
 import { logger } from "@oh-my-pi/pi-utils";
 import type { OneBotMessageEvent } from "./onebot-gateway";
 
 interface QueuedMessage {
-	seq: number;
 	event: OneBotMessageEvent;
 	timestamp: number;
 }
@@ -16,7 +15,8 @@ interface QueuedMessage {
 export class MessageQueue {
 	private buffer: QueuedMessage[] = [];
 	private capacity: number;
-	private lastSeq = 0;
+	private recentIds = new Set<number>();
+	private readonly MAX_TRACKED_IDS = 1000;
 
 	constructor(capacity = 500) {
 		this.capacity = capacity;
@@ -24,14 +24,20 @@ export class MessageQueue {
 
 	/** Push a message into the queue. Returns false if dropped (duplicate). */
 	push(event: OneBotMessageEvent): boolean {
-		// Deduplicate by message_id
-		if (event.message_id <= this.lastSeq) {
+		// Deduplicate by message_id using a recent-ID set (not monotonic)
+		if (this.recentIds.has(event.message_id)) {
+			logger.debug(`[queue] duplicate msg_id=${event.message_id} — dropped`);
 			return false;
 		}
-		this.lastSeq = event.message_id;
+
+		this.recentIds.add(event.message_id);
+		// Prune tracked IDs to prevent memory leak
+		if (this.recentIds.size > this.MAX_TRACKED_IDS) {
+			const toRemove = Array.from(this.recentIds).slice(0, 500);
+			for (const id of toRemove) this.recentIds.delete(id);
+		}
 
 		this.buffer.push({
-			seq: event.message_id,
 			event,
 			timestamp: Date.now(),
 		});
@@ -59,21 +65,9 @@ export class MessageQueue {
 		return this.buffer.length;
 	}
 
-	/** Get messages since a given sequence ID (for replay after reconnect). */
-	getSince(seq: number): OneBotMessageEvent[] {
-		return this.buffer
-			.filter(m => m.seq > seq)
-			.sort((a, b) => a.seq - b.seq)
-			.map(m => m.event);
-	}
-
-	/** Clear all messages (used on reconnect — NapCat replays anyway). */
+	/** Clear all messages and tracked IDs. */
 	clear(): void {
 		this.buffer = [];
-	}
-
-	/** Get the last seen sequence ID. */
-	get lastSequence(): number {
-		return this.lastSeq;
+		this.recentIds.clear();
 	}
 }
