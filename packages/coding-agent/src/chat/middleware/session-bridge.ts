@@ -61,6 +61,7 @@ export async function dispatchPrompt(
 	});
 	logger.info(`[bridge] subscribed, events received so far: []`);
 
+	logger.info(`[bridge] session model: id=${ompSession.model?.id} provider=${ompSession.model?.provider} api=${ompSession.model?.api} baseUrl=${ompSession.model?.baseUrl} hasHeaders=${!!ompSession.model?.headers} maxTokens=${ompSession.model?.maxTokens} input=${JSON.stringify(ompSession.model?.input)}`);
 	try {
 		// Save default model so we can restore after
 		const savedModel = ompSession.agent?.state?.model;
