@@ -8,6 +8,7 @@ import { logger } from "@oh-my-pi/pi-utils";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fetchFriends, fetchGroups } from "./qq-tools";
+import { loadConfig, saveConfig, getConfig } from "./bot-config";
 
 // Model change callback — wired by bot-runner to apply model to running sessions
 let onModelChange: ((modelId: string) => void) | null = null;
@@ -138,20 +139,12 @@ export function getRecentActivity(limit = 100): ActivityEntry[] {
 // ---------------------------------------------------------------------------
 
 const PROMPT_FILE = resolve(DATA_DIR, "prompt-override.txt");
-
 export function getPromptOverride(): string | null {
-	try {
-		if (!existsSync(PROMPT_FILE)) return null;
-		return readFileSync(PROMPT_FILE, "utf-8").trim();
-	} catch {
-		return null;
-	}
+	return getConfig().promptOverride;
 }
 
 export function setPromptOverride(prompt: string): void {
-	ensureDataDir();
-	writeFileSync(PROMPT_FILE, prompt, "utf-8");
-	logger.info("[dashboard] Prompt override saved");
+	saveConfig({ promptOverride: prompt || null });
 }
 
 // ---------------------------------------------------------------------------
@@ -277,17 +270,15 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 			return Response.json(getSessionList());
 
 		// Models
-		// Models
 		case "GET /api/models":
 			return Response.json(getAvailableModels());
 		case "GET /api/model": {
-			let model = "";
-			try { model = readFileSync("/data/selected-model.txt", "utf-8").trim(); } catch {}
-			return Response.json({ model });
+			const cfg = getConfig();
+			return Response.json({ model: cfg.model });
 		}
 		case "POST /api/model": {
 			const body = await req.json() as { model: string };
-			writeFileSync("/data/selected-model.txt", body.model, "utf-8");
+			saveConfig({ model: body.model });
 			onModelChange?.(body.model);
 			logger.info(`[api] Model switched to ${body.model}`);
 			return Response.json({ ok: true });
