@@ -11,7 +11,7 @@ import { logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
 import type { AgentSession } from "../session/agent-session";
 import { SessionManager } from "../session/session-manager";
-import { growthTools } from "./growth-tools";
+
 import { qqTools } from "./qq-tools";
 import { BOT_SYSTEM_PROMPT } from "./bot-prompt";
 import { getPromptOverride } from "./dashboard-api";
@@ -67,7 +67,7 @@ export async function ensureGlobalSession(): Promise<BotSession> {
 			enableLsp: false,
 			skipPythonPreflight: true,
 			spawns: "bash",
-			customTools: [...growthTools, ...qqTools],
+			customTools: [...qqTools],
 			systemPrompt: (_defaultBlocks) => {
 				const botPrompt = BOT_SYSTEM_PROMPT;
 				const override = getPromptOverride();
@@ -169,7 +169,7 @@ export async function createBotSession(key: string, config: BotSessionConfig): P
 			enableLsp: false,
 			skipPythonPreflight: true,
 			spawns: "bash",
-			customTools: [...growthTools, ...qqTools],
+			customTools: [...qqTools],
 			systemPrompt: (_defaultBlocks) => {
 				const botPrompt = buildBotSessionPrompt(config);
 				return [botPrompt];
