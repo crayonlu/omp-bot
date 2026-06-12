@@ -74,17 +74,26 @@ export async function dispatchPrompt(
 			? { images: options.images }
 			: undefined;
 
-		// Retry loop for AgentBusyError
-		for (let attempt = 0; attempt < 3; attempt++) {
-			try {
+		logger.info(`[bridge] >>> calling ompSession.prompt() text_len=${options.text.length} images=${promptOptions?.images?.length ?? 0}`);
+		const startTime = Date.now();
+		try {
+			await ompSession.prompt(options.text, promptOptions);
+			const elapsed = Date.now() - startTime;
+			logger.info(`[bridge] <<< prompt returned in ${elapsed}ms accumulatedReply=${accumulatedReply.length}b`);
+			if (!accumulatedReply && elapsed < 5000) {
+				logger.warn(`[bridge] Fast empty return! elapsed=${elapsed}ms — model may not be responding. session state: ${ompSession.state?.status ?? "unknown"}`);
+				// Log the session model to verify it's set
+				logger.info(`[bridge] session model: ${JSON.stringify(ompSession.model?.id)} agent model: ${JSON.stringify(ompSession.agent?.state?.model?.id)}`);
+			}
+		} catch (err) {
+			const elapsed = Date.now() - startTime;
+			logger.warn(`[bridge] prompt threw in ${elapsed}ms: ${err}`);
+			if (String(err).includes("AgentBusyError")) {
+				logger.warn(`[bridge] Session busy, waiting 4s then retrying once…`);
+				await new Promise(r => setTimeout(r, 4000));
 				await ompSession.prompt(options.text, promptOptions);
-				break;
-			} catch (err) {
-				if (String(err).includes("AgentBusyError") && attempt < 2) {
-					logger.warn(`[bridge] Session busy (attempt ${attempt + 1}), retrying…`);
-					await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
-					continue;
-				}
+				logger.info(`[bridge] retry prompt returned in ${Date.now() - startTime}ms`);
+			} else {
 				throw err;
 			}
 		}
