@@ -618,9 +618,10 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 				break;
 			}
 
-		// Save session file path for recovery
-		saveSessionFilePath();
 	}
+
+	// Save session file path for recovery
+	saveSessionFilePath();
 	} finally {
 		flushBuffer();
 		unsub();
