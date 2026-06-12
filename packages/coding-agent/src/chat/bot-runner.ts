@@ -617,6 +617,9 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 				logger.error(`[dispatch] prompt failed: ${err}`);
 				break;
 			}
+
+		// Save session file path after first successful prompt
+		saveSessionFilePath();
 		}
 	} finally {
 		flushBuffer();
