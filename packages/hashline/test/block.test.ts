@@ -87,6 +87,35 @@ describe("resolveBlockEdits", () => {
 		);
 	});
 
+	it("includes a nearby-context preview in the block-unresolved error", () => {
+		const edits = parsePatch("replace block 3:\n+X").edits;
+		const text = "alpha\nbravo\ncharlie\ndelta\necho\nfoxtrot";
+		let error: Error | undefined;
+		try {
+			resolveBlockEdits(edits, text, PATH, () => null);
+		} catch (err) {
+			error = err as Error;
+		}
+		expect(error?.message).toContain("could not resolve a syntactic block beginning on line 3");
+		// ±2 lines of context around the anchor, anchor `*`-marked.
+		expect(error?.message).toContain(" 1:alpha");
+		expect(error?.message).toContain("*3:charlie");
+		expect(error?.message).toContain(" 5:echo");
+		expect(error?.message).not.toContain("foxtrot");
+	});
+
+	it("omits the context preview when the anchor line is out of range", () => {
+		const edits = parsePatch("replace block 9:\n+X").edits;
+		let error: Error | undefined;
+		try {
+			resolveBlockEdits(edits, "only\ntwo", PATH, () => null);
+		} catch (err) {
+			error = err as Error;
+		}
+		expect(error?.message).toContain("could not resolve a syntactic block beginning on line 9");
+		expect(error?.message).not.toContain("\n\n");
+	});
+
 	it("fires onResolved with the resolved span for replace and delete blocks", () => {
 		const seen: BlockResolution[] = [];
 		// stubResolver maps line N → span [N, N+1].
@@ -129,7 +158,7 @@ describe("PatchSection.applyTo / applyPartialTo with block edits", () => {
 
 	it("applyTo throws when a block edit has no resolver", () => {
 		const section = Patch.parseSingle(`[${PATH}#1A2B]\nreplace block 2:\n+X`);
-		expect(() => section.applyTo(text)).toThrow("replace block");
+		expect(() => section.applyTo(text)).toThrow("no block resolver configured");
 	});
 
 	it("applyPartialTo drops an unresolvable block edit instead of throwing", () => {
@@ -306,9 +335,65 @@ describe("insert after block", () => {
 		expect(seen).toEqual([{ anchorLine: 2, start: 2, end: 3, op: "insert_after" }]);
 	});
 
-	it("throws an op-specific unresolved error when the resolver returns null", () => {
+	it("lowers an unresolvable anchor to plain `insert after N:` with a warning", () => {
 		const edits = parsePatch("insert after block 7:\n+X").edits;
-		expect(() => resolveBlockEdits(edits, "ignored", PATH, () => null)).toThrow("`insert after block 7:`");
+		const warnings: string[] = [];
+
+		const resolved = resolveBlockEdits(edits, "ignored", PATH, () => null, {
+			onWarning: warning => warnings.push(warning),
+		});
+
+		expect(normalizeEdits(resolved)).toEqual(normalizeEdits(parsePatch("insert after 7:\n+X").edits));
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain("applied as plain `insert after 7:`");
+	});
+
+	it("lowers `insert after block` even when no resolver is wired", () => {
+		const edits = parsePatch("insert after block 2:\n+X").edits;
+		const warnings: string[] = [];
+
+		const resolved = resolveBlockEdits(edits, "ignored", PATH, undefined, {
+			onWarning: warning => warnings.push(warning),
+		});
+
+		expect(normalizeEdits(resolved)).toEqual(normalizeEdits(parsePatch("insert after 2:\n+X").edits));
+		expect(warnings).toHaveLength(1);
+	});
+
+	it("lowers a closing-delimiter anchor to plain `insert after N:` with a warning", () => {
+		const section = Patch.parseSingle(`[${PATH}#1A2B]\ninsert after block 3:\n+  done();`);
+		const resolver: BlockResolver = ({ line }) => (line === 2 ? { start: 2, end: 3 } : null);
+
+		const result = section.applyTo(text, resolver);
+
+		// line 3 is `  }` — no block begins there, but it ends one; the body
+		// lands after it, exactly where `insert after block` would have put it.
+		expect(result.text).toBe("function x() {\n  if (y) {\n  }\n  done();\n}\n");
+		expect(result.warnings?.some(w => /applied as plain `insert after 3:`/.test(w))).toBe(true);
+	});
+
+	it("lowers an unresolvable blank-line anchor to plain `insert after N:` instead of failing", () => {
+		const blankAnchored = Patch.parseSingle(`[notes.md#1A2B]\ninsert after block 2:\n+- new entry`);
+
+		const result = blankAnchored.applyTo("### Changed\n\n- old entry\n", () => null);
+
+		expect(result.text).toBe("### Changed\n\n- new entry\n- old entry\n");
+		expect(
+			result.warnings?.some(w => /could not resolve a syntactic block.*applied as plain `insert after 2:`/.test(w)),
+		).toBe(true);
+	});
+
+	it("Patcher surfaces the closer-anchor lowering warning", async () => {
+		const fs = new InMemoryFilesystem([[PATH, text]]);
+		const snapshots = new InMemorySnapshotStore();
+		const tag = snapshots.record(PATH, text);
+		const resolver: BlockResolver = ({ line }) => (line === 2 ? { start: 2, end: 3 } : null);
+		const patcher = new Patcher({ fs, snapshots, blockResolver: resolver });
+
+		const result = await patcher.apply(Patch.parse(`[${PATH}#${tag}]\ninsert after block 3:\n+  done();`));
+
+		expect(fs.get(PATH)).toBe("function x() {\n  if (y) {\n  }\n  done();\n}\n");
+		expect(result.sections[0]?.warnings.some(w => /applied as plain `insert after 3:`/.test(w))).toBe(true);
 	});
 
 	it("applyTo inserts the body after the resolved block's last line", () => {

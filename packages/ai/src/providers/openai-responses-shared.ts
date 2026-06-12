@@ -289,7 +289,7 @@ export function convertResponsesInputContent(
 	for (const item of imageBlocks) {
 		normalizedContent.push({
 			type: "input_image",
-			detail: "auto",
+			detail: item.detail ?? "auto",
 			image_url: `data:${item.mimeType};base64,${item.data}`,
 		} satisfies ResponseInputImage);
 	}
@@ -448,7 +448,7 @@ export function appendResponsesToolResultMessages<TApi extends Api>(
 		if (block.type === "image") {
 			contentParts.push({
 				type: "input_image",
-				detail: "auto",
+				detail: block.detail ?? "auto",
 				image_url: `data:${block.mimeType};base64,${block.data}`,
 			} satisfies ResponseInputImage);
 		}
@@ -913,7 +913,24 @@ export async function processResponsesStream<TApi extends Api>(
 			if (output.content.some(block => block.type === "toolCall") && output.stopReason === "stop") {
 				output.stopReason = "toolUse";
 			}
+			// Codex-lineage backends/gateways mark an unfinished turn with
+			// `end_turn: false` on the terminal event (the response ended on
+			// commentary only). Not in the SDK types or the platform API today —
+			// inert when absent. Same mapping as openai-codex-responses: surface a
+			// non-terminal stop so the agent loop re-samples instead of ending the
+			// turn.
+			if ((response as { end_turn?: boolean } | undefined)?.end_turn === false && output.stopReason === "stop") {
+				output.stopDetails = { type: "pause_turn" };
+			}
 			options?.onCompleted?.();
+			// `response.completed`/`response.incomplete` is the last event of a
+			// Responses stream. Stop pulling instead of waiting for the server to
+			// close the connection: misbehaving providers keep the socket open
+			// after the terminal event, which would park this loop until the idle
+			// watchdog converts an already-successful turn into a timeout error.
+			// Breaking unwinds the iterator chain (the consumer's `.return()`
+			// reaches the SDK stream), actively releasing the connection.
+			break;
 		} else if (event.type === "error") {
 			throw new Error(`Error Code ${event.code}: ${event.message}`);
 		} else if (event.type === "response.failed") {
@@ -1029,8 +1046,12 @@ type ReasoningOptions = {
 
 /**
  * Apply reasoning-related Responses parameters: enable encrypted reasoning content for replay,
- * set effort/summary when requested, and otherwise inject the GPT-5 "Juice: 0" no-reasoning hack.
- * Mutates `params` and may push a developer message into `messages`.
+ * set effort/summary when requested, and otherwise inject the "Juice: 0" no-reasoning hack
+ * when `model.compat.requiresJuiceZeroHack` is set (GPT-5 family by default).
+ * Mutates `params` and may push a developer message into `messages`. Returns
+ * the number of per-turn trailing scaffolding items appended to `messages`
+ * (the "Juice: 0" developer item), so callers doing stateful
+ * `previous_response_id` chaining can exclude them from append-baseline math.
  *
  * @param omitReasoningEffort - When `true`, suppresses `params.reasoning.effort` from the wire
  *   body. Set by `xai-responses.ts` via {@link OpenAIResponsesOptions.omitReasoningEffort} for
@@ -1043,14 +1064,14 @@ type ReasoningOptions = {
  */
 export function applyResponsesReasoningParams<P extends OpenAI.Responses.ResponseCreateParamsStreaming>(
 	params: P,
-	model: Model<Api>,
+	model: Model<"openai-responses" | "azure-openai-responses" | "openai-codex-responses">,
 	options: ReasoningOptions | undefined,
 	messages: ResponseInput,
 	mapEffort?: (effort: string) => string,
 	includeEncryptedReasoning: boolean = true,
 	omitReasoningEffort: boolean = false,
-): void {
-	if (!model.reasoning) return;
+): number {
+	if (!model.reasoning) return 0;
 	// Always request encrypted reasoning content so reasoning items can be replayed in
 	// multi-turn conversations when store is false (items aren't persisted server-side, so
 	// we must include the full content). See: https://github.com/can1357/oh-my-pi/issues/41
@@ -1086,13 +1107,15 @@ export function applyResponsesReasoningParams<P extends OpenAI.Responses.Respons
 			}
 			params.reasoning = reasoningParams as P["reasoning"];
 		}
-	} else if (model.name.toLowerCase().startsWith("gpt-5")) {
+	} else if (model.compat.requiresJuiceZeroHack) {
 		// Jesus Christ, see https://community.openai.com/t/need-reasoning-false-option-for-gpt-5/1351588/7
 		messages.push({
 			role: "developer",
 			content: [{ type: "input_text", text: "# Juice: 0 !important" }],
 		});
+		return 1;
 	}
+	return 0;
 }
 
 /** Populate `output.usage` from a Responses-API `response.usage` payload. Does not invoke `calculateCost`. */
@@ -1128,4 +1151,35 @@ export function populateResponsesUsageFromResponse(
 	if (premiumRequests !== undefined) {
 		output.usage.premiumRequests = premiumRequests;
 	}
+}
+
+/**
+ * Strict-prefix delta for stateful `previous_response_id` chaining (used by the
+ * platform Responses provider and the Codex provider on both transports):
+ * returns the input items the current request appends beyond the previous
+ * request's input plus the previous response's output items, or null when the
+ * request options differ or history mutated (the chain must break). Per-turn
+ * `client_metadata` (e.g. rotating turn ids) is excluded from the option
+ * comparison; codex-rs excludes it from the same check.
+ */
+export function buildResponsesDeltaInput<TItem>(
+	previous: { input?: unknown } | undefined,
+	previousResponseItems: readonly TItem[] | undefined,
+	current: { input?: unknown },
+): TItem[] | null {
+	if (!previous) return null;
+	if (!Array.isArray(previous.input) || !Array.isArray(current.input)) return null;
+	const previousWithoutInput = { ...previous, input: undefined, client_metadata: undefined };
+	const currentWithoutInput = { ...current, input: undefined, client_metadata: undefined };
+	if (JSON.stringify(previousWithoutInput) !== JSON.stringify(currentWithoutInput)) {
+		return null;
+	}
+	const baseline = [...previous.input, ...(previousResponseItems ?? [])];
+	if (current.input.length <= baseline.length) return null;
+	for (let index = 0; index < baseline.length; index += 1) {
+		if (JSON.stringify(baseline[index]) !== JSON.stringify(current.input[index])) {
+			return null;
+		}
+	}
+	return current.input.slice(baseline.length) as TItem[];
 }
