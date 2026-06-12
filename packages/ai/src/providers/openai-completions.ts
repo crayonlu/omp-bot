@@ -482,6 +482,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 					);
 				}
 				try {
+					logger?.debug?.(`[openai] calling ${baseUrl}/chat/completions model=${(params as any)?.model ?? "?"} msgs=${((params as any)?.messages?.length ?? -1)} stream=true`);
+
 					const { data, response, request_id } = await client.chat.completions
 						.create(params, requestOptions)
 						.withResponse();
