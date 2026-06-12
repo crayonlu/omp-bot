@@ -5,8 +5,8 @@
  * AgentSession in its own workspace directory. Sessions are lazy-created
  * on first message and persisted indefinitely.
  */
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { resolve, join as pathJoin } from "node:path";
 import { logger, setProjectDir, getProjectDir } from "@oh-my-pi/pi-utils";
 import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "../sdk";
 import type { AgentSession } from "../session/agent-session";
@@ -82,9 +82,26 @@ export async function ensureGlobalSession(): Promise<BotSession> {
 
 		// Save the session file path for future recovery
 		try {
-			const sessionFile = result.session.sessionFile;
-			if (sessionFile) writeFileSync(recoveryPath, String(sessionFile), "utf-8");
-		} catch {}
+			const agentsDir = process.env.HOME ? pathJoin(process.env.HOME, ".omp/agent") : "/root/.omp/agent";
+			const sessionsRoot = pathJoin(agentsDir, "sessions");
+			if (existsSync(sessionsRoot)) {
+				const dirs = readdirSync(sessionsRoot);
+				for (const dir of dirs) {
+					const sessionDir = pathJoin(sessionsRoot, dir);
+					if (!statSync(sessionDir).isDirectory()) continue;
+					const files = readdirSync(sessionDir).filter(f => f.endsWith(".jsonl"));
+					if (files.length > 0) {
+						const latest = files.sort().reverse()[0];
+						const sessionFile = pathJoin(sessionDir, latest);
+						writeFileSync(recoveryPath, sessionFile, "utf-8");
+						logger.info(`[bot-session] Saved session file to ${recoveryPath}: ${sessionFile}`);
+						break;
+					}
+				}
+			}
+		} catch (err) {
+			logger.warn(`[bot-session] Could not find/save session file: ${err}`);
+		}
 
 		globalSession = {
 			sessionKey: "zero",
