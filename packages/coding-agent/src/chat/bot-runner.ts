@@ -388,7 +388,8 @@ async function handleManualMessage(req: Request): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 async function handleOneBotMessage(event: OneBotMessageEvent): Promise<void> {
-	queue.push(event);
+	const pushed = queue.push(event);
+	logger.debug(`[ws] msg id=${event.message_id} from=${event.user_id} text="${event.raw_message.slice(0, 40)}" queued=${pushed} depth=${queue.depth}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,6 +398,10 @@ async function handleOneBotMessage(event: OneBotMessageEvent): Promise<void> {
 
 async function processMessageQueue(): Promise<void> {
 	while (true) {
+		// Debug: log queue state
+		if (queue.depth > 0) {
+			logger.debug(`[queue] depth=${queue.depth}, processing...`);
+		}
 		if (queue.hasMessages) {
 			const msg = queue.dequeue();
 			if (msg) {

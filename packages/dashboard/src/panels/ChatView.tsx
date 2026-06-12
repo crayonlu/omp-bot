@@ -30,13 +30,23 @@ export default function ChatView({ wsMessage }: { wsMessage: WSMessage | null })
     if (wsMessage?.type === "activity" && wsMessage.data) {
       const entry = (wsMessage.data as any).entry as Record<string, string> | undefined
       if (!entry) return
-      const newMsg: Message = {
-        id: `live-${Date.now()}`,
-        role: entry.decision === "skipped" ? "user" : "assistant",
-        content: (entry.reply || entry.message).slice(0, 300),
+
+      // User's message
+      const userMsg: Message = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: entry.message?.slice(0, 300),
         time: new Date(entry.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
       }
-      setMsgs(prev => [...prev, newMsg])
+      // Bot's reply (if present)
+      const botMsg: Message | null = entry.decision === "replied" && entry.reply ? {
+        id: `bot-${Date.now()}`,
+        role: "assistant",
+        content: entry.reply.slice(0, 300),
+        time: new Date(entry.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+      } : null
+
+      setMsgs(prev => botMsg ? [...prev, userMsg, botMsg] : [...prev, userMsg])
     }
   }, [wsMessage])
 
