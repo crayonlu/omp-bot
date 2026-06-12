@@ -596,6 +596,11 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	logger.info(`[dispatch] images=${promptImages ? promptImages.length : 0}`);
 	try {
 		logger.info(`[dispatch] steer: ${promptText.slice(0, 100)}…`);
+		// Switch to vision model when images are present
+		const visionModel = { id: "minimax/minimax-m3", provider: "ppio", api: "openai-completions", baseUrl: "https://api.ppio.com/openai", input: ["text", "image"] as const };
+		if (promptImages) {
+			try { await (botSession.session as any).setModelTemporary(visionModel); logger.info(`[dispatch] switched to vision model`); } catch {}
+		}
 		for (let attempt = 0; attempt < 3; attempt++) {
 			try {
 				await botSession.session.prompt(promptText, promptImages ? { images: promptImages } : undefined);
@@ -616,6 +621,12 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	saveSessionFilePath();
 	} finally {
 		flushBuffer();
+
+		// Switch back to default model after vision turn
+		if (promptImages) {
+			const defaultModel = { id: "deepseek/deepseek-v4-flash", provider: "ppio", api: "openai-completions", baseUrl: "https://api.ppio.com/openai", input: ["text"] as const };
+			try { await (botSession.session as any).setModelTemporary(defaultModel); logger.info(`[dispatch] switched back to deepseek`); } catch (e) { logger.warn(`[dispatch] model switch-back failed: ${e}`); }
+		}
 		unsub();
 		if (debounceTimer) clearTimeout(debounceTimer);
 	}
