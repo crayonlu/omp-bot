@@ -596,10 +596,13 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 	logger.info(`[dispatch] images=${promptImages ? promptImages.length : 0}`);
 	try {
 		logger.info(`[dispatch] steer: ${promptText.slice(0, 100)}…`);
-		// Switch to vision model when images are present
-		const visionModel = { id: "minimax/minimax-m3", provider: "ppio", api: "openai-completions", baseUrl: "https://api.ppio.com/openai", input: ["text", "image"] as const };
-		if (promptImages) {
-			try { await (botSession.session as any).setModelTemporary(visionModel); logger.info(`[dispatch] switched to vision model`); } catch {}
+		// When images are present, temporarily set vision model directly on agent state
+		// (setModelTemporary is broken — it doesn't update agent.state.model that the getter reads)
+		const defaultModel = (botSession.session as any).agent?.state?.model;
+		if (promptImages && defaultModel) {
+			const visionModel = { ...defaultModel, id: "minimax/minimax-m3", input: ["text", "image"] as const };
+			(botSession.session as any).agent.state.model = visionModel;
+			logger.info(`[dispatch] set vision model on agent.state: ${visionModel.id}`);
 		}
 		for (let attempt = 0; attempt < 3; attempt++) {
 			try {
@@ -623,9 +626,9 @@ async function dispatchMessage(event: OneBotMessageEvent): Promise<ChatMessageRe
 		flushBuffer();
 
 		// Switch back to default model after vision turn
-		if (promptImages) {
-			const defaultModel = { id: "deepseek/deepseek-v4-flash", provider: "ppio", api: "openai-completions", baseUrl: "https://api.ppio.com/openai", input: ["text"] as const };
-			try { await (botSession.session as any).setModelTemporary(defaultModel); logger.info(`[dispatch] switched back to deepseek`); } catch (e) { logger.warn(`[dispatch] model switch-back failed: ${e}`); }
+		if (promptImages && defaultModel) {
+			(botSession.session as any).agent.state.model = defaultModel;
+			logger.info(`[dispatch] restored default model`);
 		}
 		unsub();
 		if (debounceTimer) clearTimeout(debounceTimer);
