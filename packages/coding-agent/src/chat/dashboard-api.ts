@@ -178,7 +178,7 @@ export async function handleDashboardRequest(req: Request): Promise<Response | n
 
 	// Dashboard HTML
 	if (method === "GET" && (path === "/dashboard" || path === "/")) {
-		return serveDashboard();
+		return await serveDashboard();
 	}
 
 
@@ -253,11 +253,8 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 		// Overview (aggregated stats)
 		case "GET /api/overview": {
 			const activity = getRecentActivity(200);
-			const today = activity.filter(e => {
-				const d = new Date(e.timestamp);
-				const now = new Date();
-				return d.toDateString() === now.toDateString();
-			});
+			const now = new Date();
+			const today = activity.filter(e => new Date(e.timestamp).toDateString() === now.toDateString());
 			return Response.json({
 				sessionCount: getSessionList().length,
 				channelCount: getChannelConfigs().length,
@@ -266,6 +263,26 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 				skippedToday: today.filter(e => e.decision === "skipped").length,
 				errorsToday: today.filter(e => e.decision === "error").length,
 			});
+		}
+
+		// Usage / cost statistics — shell out to omp stats
+		case "GET /api/usage": {
+			try {
+				const { $ } = await import("bun");
+				const result = await $`/usr/local/bin/omp stats --json`.quiet().nothrow();
+				if (result.exitCode === 0) {
+					const text = result.text();
+					// Find JSON body (after "=== AI Usage Statistics ===" or at first '{')
+					const jsonStart = text.indexOf("{");
+					if (jsonStart >= 0) {
+						return Response.json(JSON.parse(text.slice(jsonStart)));
+					}
+				}
+				throw new Error(`omp stats failed (exit ${result.exitCode})`);
+			} catch (err) {
+				logger.warn(`[dashboard] Usage stats unavailable: ${err}`);
+				return Response.json({ error: String(err) }, { status: 503 });
+			}
 		}
 
 		// Health (already exists but add here for completeness)
@@ -301,9 +318,33 @@ function getMimeType(filePath: string): string {
 	return MIME_TYPES[ext] ?? "application/octet-stream";
 }
 
-function serveDashboard(): Response {
+async function serveDashboard(): Promise<Response> {
 	try {
-		const html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
+		let html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
+
+		// Inject usage summary before React mount
+		try {
+			const { $ } = await import("bun");
+			const result = await $`/usr/local/bin/omp stats --json`.quiet().nothrow();
+			if (result.exitCode === 0) {
+				const text = result.text();
+				const jsonStart = text.indexOf("{");
+				if (jsonStart >= 0) {
+					const stats = JSON.parse(text.slice(jsonStart));
+					const o = stats.overall ?? {};
+					const cost = (o.totalCost ?? 0).toFixed(3);
+					const reqs = o.totalRequests ?? 0;
+					const toks = ((o.totalInputTokens ?? 0) + (o.totalOutputTokens ?? 0)) / 1000;
+					const banner = `<div style="background:#1a1a2e;color:#e0e0e0;padding:8px 16px;font:14px/1.5 monospace;border-bottom:1px solid #333;display:flex;gap:24px;flex-wrap:wrap">
+<span>💰 <b>$${cost}</b></span>
+<span>📨 ${reqs} reqs</span>
+<span>📝 ${toks.toFixed(0)}K tokens</span>
+</div>`;
+					html = html.replace('<div id="root"></div>', banner + '<div id="root"></div>');
+				}
+			}
+		} catch {}
+
 		return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 	} catch {
 		return new Response(
