@@ -32,12 +32,18 @@ export async function enrichImages(images: ImageAttachment[]): Promise<ImageAtta
 		try {
 			const echo = `omp_img_${img.fileId.slice(0, 8)}_${Date.now()}`;
 			const resp = await sendActionFn("get_image", { file: img.fileId }, echo);
-			const data = resp as any;
-			if (data?.base64) {
+			logger.info(`[enrich] get_image response keys=${Object.keys(resp as object).join(",")}`);
+			// NapCat get_image returns { file, file_size, base64?, filename?, url? }
+			const data = resp as Record<string, unknown>;
+			if (data?.base64 && typeof data.base64 === "string") {
 				results.push({ ...img, dataUri: `data:image/jpeg;base64,${data.base64}` });
-				logger.info(`[enrich] image ${img.fileId.slice(0, 8)} → base64 (${data.base64.length}b)`);
+				logger.info(`[enrich] image ${img.fileId.slice(0, 8)} → base64 (${(data.base64 as string).length}b)`);
+			} else if (data?.url && typeof data.url === "string") {
+				// Fallback: NapCat might return only url (no base64) in some configurations
+				results.push({ ...img, dataUri: data.url });
+				logger.info(`[enrich] image ${img.fileId.slice(0, 8)} → url (${(data.url as string).slice(0, 60)}…)`);
 			} else {
-				logger.warn(`[enrich] get_image returned no base64 for ${img.fileId.slice(0, 8)}`);
+				logger.warn(`[enrich] get_image response with no usable data for ${img.fileId.slice(0, 8)}: ${JSON.stringify(data).slice(0, 200)}`);
 				results.push(img);
 			}
 		} catch (err) {

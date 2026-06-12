@@ -10,7 +10,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { parseEvent } from "./ingress";
 import { enrichImages } from "./enrich";
 import { formatPrompt } from "./format";
-import { selectModel, applyModelToSession } from "./model-manager";
+import { selectModel } from "./model-manager";
 import { dispatchPrompt } from "./session-bridge";
 import { StreamManager } from "./stream";
 import { sendReply } from "./respond";

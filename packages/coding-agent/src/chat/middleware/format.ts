@@ -47,12 +47,18 @@ export function formatPrompt(msg: InternalMessage): FormattedPrompt {
 	const textContent = msg.text || "(media-only message)";
 	parts.push(`  ${textContent}`);
 
-	// Build ImageContent[] from enriched images
-	const images: ImageContent[] = [];
+	// Build ImageContent[] compatible with pi-ai (expects { type:"image", data, mimeType })
+	const images: Array<{ type: "image"; data: string; mimeType: string }> = [];
 	for (const img of msg.images) {
-		const src = img.dataUri || img.url;
-		if (src) {
-			images.push({ type: "image", image: src });
+		if (img.dataUri?.startsWith("data:")) {
+			// data:image/jpeg;base64,/9j... → extract mimeType + base64
+			const match = img.dataUri.match(/^data:([^;]+);base64,(.+)$/);
+			if (match) {
+				images.push({ type: "image", data: match[2], mimeType: match[1] });
+			}
+		} else if (img.url) {
+			// URL — normalizeModelContextImages can download it
+			images.push({ type: "image", data: img.url, mimeType: "image/jpeg" });
 		}
 	}
 
