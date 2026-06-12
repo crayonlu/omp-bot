@@ -126,16 +126,12 @@ export async function dispatchPrompt(
 
 	let accumulatedReply = "";
 	const toolCalls: string[] = [];
-	// Subscribe to ALL agent output events for debugging
-	const eventsReceived: string[] = [];
+	const eventTypes: string[] = [];
 	const unsub = ompSession.subscribe((evt: AgentSessionEvent) => {
-		eventsReceived.push(evt.type);
-		if (isMessageUpdateEvent(evt) && evt.assistantMessageEvent?.type === "text_delta") {
+		eventTypes.push(evt.type);
+		if (evt.type === "message_update" && evt.assistantMessageEvent?.type === "text_delta") {
 			accumulatedReply += evt.assistantMessageEvent.delta;
 			onDelta?.(evt.assistantMessageEvent.delta);
-		} else if (evt.type === "message_update") {
-			// Only log non-text-delta updates
-			logger.debug(`[bridge] msg_update event: type=${evt.type} hasDelta=${"assistantMessageEvent" in evt}`);
 		} else if (evt.type === "message_end" || evt.type === "agent_end" || evt.type === "turn_end") {
 			onEnd?.();
 		} else if (isToolExecutionStartEvent(evt)) {
@@ -161,16 +157,14 @@ export async function dispatchPrompt(
 		const promptOptions = options.images && options.images.length > 0
 			? { images: options.images }
 			: undefined;
-
 		logger.info(`[bridge] >>> calling ompSession.prompt() text_len=${options.text.length} images=${promptOptions?.images?.length ?? 0}`);
 		const startTime = Date.now();
 		try {
-			const promptResult = await ompSession.prompt(options.text, promptOptions);
+			await ompSession.prompt(options.text, promptOptions);
 			if (!accumulatedReply) {
-				const promptResultKeys = promptResult ? Object.keys(promptResult as object) : null;
-				const mode = (ompSession as unknown as { mode: string }).mode;
-				logger.warn(
-					`[bridge] Empty reply. Events received during prompt: [${eventsReceived.join(",")}]. Session state: ${JSON.stringify({ status: ompSession.state?.status, mode, conversationLength: ompSession.conversation?.length, promptResultKeys })}`,
+				logger.info(
+					`[bridge] Empty reply after prompt — no text_delta received. ` +
+					`model=${options.model?.id ?? "default"} eventTypes=${JSON.stringify([...new Set(eventTypes)])}`,
 				);
 			}
 		} catch (err) {

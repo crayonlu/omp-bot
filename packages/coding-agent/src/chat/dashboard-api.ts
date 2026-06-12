@@ -264,28 +264,6 @@ async function handleApiRoute(method: string, path: string, req: Request, url: U
 				errorsToday: today.filter(e => e.decision === "error").length,
 			});
 		}
-
-		// Usage / cost statistics — shell out to omp stats
-		case "GET /api/usage": {
-			try {
-				const { $ } = await import("bun");
-				const result = await $`/usr/local/bin/omp stats --json`.quiet().nothrow();
-				if (result.exitCode === 0) {
-					const text = result.text();
-					// Find JSON body (after "=== AI Usage Statistics ===" or at first '{')
-					const jsonStart = text.indexOf("{");
-					if (jsonStart >= 0) {
-						return Response.json(JSON.parse(text.slice(jsonStart)));
-					}
-				}
-				throw new Error(`omp stats failed (exit ${result.exitCode})`);
-			} catch (err) {
-				logger.warn(`[dashboard] Usage stats unavailable: ${err}`);
-				return Response.json({ error: String(err) }, { status: 503 });
-			}
-		}
-
-		// Health (already exists but add here for completeness)
 		case "GET /api/health":
 			return Response.json({ status: "ok" });
 
@@ -321,10 +299,9 @@ function getMimeType(filePath: string): string {
 function serveDashboard(): Response {
 	try {
 		let html = readFileSync(resolve(DASHBOARD_DIR, "index.html"), "utf-8");
-		// Normalize asset paths: built index.html may use relative paths like
-		// src="index.js" or href="styles.css" — prefix with /assets/ so the
-		// server's static asset handler can serve them.
+		// Normalize asset paths
 		html = html.replace(/(src|href)="(?!\/|https?:\/\/)([^"]+)"/g, '$1="/assets/$2"');
+
 		return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 	} catch {
 		return new Response(

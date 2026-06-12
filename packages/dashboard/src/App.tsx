@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react"
 import { useWebSocket } from "./hooks/useWebSocket"
 import ChatView from "./panels/ChatView"
 
@@ -6,13 +5,6 @@ const wsUrl = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.ho
 
 export default function App() {
   const { lastMessage, connected } = useWebSocket(wsUrl)
-  const [usage, setUsage] = useState<{ cost: string; reqs: number } | null>(null)
-  useEffect(() => {
-    fetch("/api/usage").then(r => r.json()).then(d => {
-      const o = d.overall || {}
-      setUsage({ cost: (o.totalCost || 0).toFixed(3), reqs: o.totalRequests || 0 })
-    }).catch(() => {})
-  }, [])
   return (
     <div className="mx-auto flex h-dvh max-w-2xl flex-col px-4 py-3">
       <header className="flex shrink-0 items-center justify-between pb-3">

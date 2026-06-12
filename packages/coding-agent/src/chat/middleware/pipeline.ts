@@ -69,6 +69,21 @@ export class MessagePipeline {
 					unlinkSync(CRASH_MARKER);
 				}
 			} catch { /* ignore */ }
+			// Handle /clear command: reset session context
+			const rawText = event.raw_message.trim();
+			if (rawText.startsWith("/clear")) {
+				const agent = session.session?.agent;
+				if (agent) {
+					agent.clearMessages();
+					logger.info(`[pipeline] /clear: session cleared for uid=${event.user_id}`);
+				}
+				return {
+					reply: "已清除会话上下文，可以开始新话题了。",
+					silent: false,
+					sessionId: sessionKey,
+					toolCalls: [],
+				};
+			}
 
 			logger.info(`[pipeline] steer: ${finalText.slice(0, 120)}…`);
 			logger.info(`[pipeline] images=${images.length}`);

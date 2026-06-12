@@ -174,19 +174,7 @@ try {
 	logger.info(`[bot] Bot server running. Waiting for QQ messages...`);
 	startCleanupTimer();
 
-	// Start OMP stats server for dashboard (port 3847, background)
-	(async () => {
-		try {
-			const statsProc = Bun.spawn(["/usr/local/bin/omp", "stats", "--port", "3847"], {
-				stdout: "ignore",
-				stderr: "ignore",
-			});
-			statsProc.unref();
-			logger.info("[bot] OMP stats server started on port 3847");
-		} catch (err) {
-			logger.warn(`[bot] Failed to start OMP stats server: ${err}`);
-		}
-	})();
+
 	processMessageQueue();
 
 	setInterval(() => {
@@ -212,38 +200,15 @@ async function handleHttpRequest(req: Request): Promise<Response> {
 	if (path === "/favicon.ico" || path === "/favicon.svg") {
 		return new Response("", { status: 204 });
 	}
-
-	// Proxy OMP stats API calls to the stats server (before dashboard handler
-	// because handleDashboardRequest would reject /api/stats/* as unknown routes).
-	if (path.startsWith("/api/stats") || path === "/api/sync" || path.startsWith("/api/request/") || path.startsWith("/api/requests/")) {
-		try {
-			const targetUrl = `http://127.0.0.1:3847${path}${url.search}`;
-			const proxyResp = await fetch(targetUrl, { method: req.method, headers: { "accept": "application/json" } });
-			return new Response(proxyResp.body, {
-				status: proxyResp.status,
-				headers: { "content-type": proxyResp.headers.get("content-type") ?? "application/json" },
-			});
-		} catch {
-			return new Response("Stats server unavailable", { status: 502 });
-		}
-	}
-
 	const dashboardResp = await handleDashboardRequest(req);
 	if (dashboardResp) return dashboardResp;
 
-	switch (`${req.method} ${url.pathname}`) {
-		case "GET /health":
-			return Response.json({
-				status: "ok",
-				onebot_connected: gateway.isConnected,
-				queue_depth: queue.depth,
-				uptime: process.uptime(),
-			});
-		case "POST /chat/message":
-			return handleManualMessage(req);
-		default:
-			return new Response("Not Found", { status: 404 });
+	// Fallback routes
+	if (url.pathname === "/api/chat/message" && req.method === "POST") {
+		return handleManualMessage(req);
 	}
+
+	return new Response("Not Found", { status: 404 });
 }
 
 async function handleManualMessage(req: Request): Promise<Response> {

@@ -45,9 +45,7 @@ NapCat (QQ protocol)                     omp-bot (Docker)
                                    │    ↓ tool execution    │
                                    │    ↓ streaming reply   │
                                    │                        │
-                                   │  Dashboard :3099       │
-                                   │  OMP Stats :3847       │
-                                   └────────────────────────┘
+                                  │  Dashboard :3099       │
 ```
 
 ### Message Flow
@@ -95,9 +93,6 @@ export PPIO_API_KEY="sk-..."
 docker run -d --name omp-bot \
   -p 3099:3099 \
   -p 3001:3001 \
-  -p 3847:3847 \
-  -v /data/.omp:/root/.omp \
-  -e PPIO_API_KEY \
   ghcr.io/crayonlu/omp-bot:latest \
   serve --port 3099
 ```
@@ -168,7 +163,6 @@ bun run src/cli.ts serve --port 3099
 
 ### Key source directories
 
-```
 packages/coding-agent/src/chat/
 ├── bot-runner.ts          # Entry point: HTTP + WebSocket + message loop
 ├── bot-config.ts          # Config read/write
@@ -177,7 +171,6 @@ packages/coding-agent/src/chat/
 ├── session-manager.ts     # Bot session lifecycle
 ├── serve-cli.ts           # Re-export for omp serve command
 ├── dashboard-api.ts       # Web dashboard HTTP/WS API
-├── dashboard.html         # Embedded dashboard SPA
 ├── onebot-gateway.ts      # OneBot v11 WebSocket server
 ├── onebot-types.ts        # OneBot protocol types
 ├── qq-tools.ts            # QQ message sending
@@ -192,7 +185,6 @@ packages/coding-agent/src/chat/
 │   ├── respond.ts         # Reply sending via NapCat
 │   ├── stream.ts          # Streaming reply manager
 │   └── types.ts           # Shared types
-```
 
 ### Key dependencies
 
