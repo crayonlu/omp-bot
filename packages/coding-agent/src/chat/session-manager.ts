@@ -39,9 +39,26 @@ export let globalSession: BotSession | null = null;
 
 export async function ensureGlobalSession(): Promise<BotSession> {
 	if (globalSession) return globalSession;
-	logger.info(`[bot-session] Creating global session`);
+
 	const workspaceDir = "/omp-bot-workspace/zero";
 	mkdirSync(workspaceDir, { recursive: true });
+
+	// Try to restore previous session from saved file path
+	const recoveryPath = "/data/last-session-zero.path";
+	let restoredManager: SessionManager | undefined;
+	if (existsSync(recoveryPath)) {
+		try {
+			const sessionFile = readFileSync(recoveryPath, "utf-8").trim();
+			if (existsSync(sessionFile)) {
+				restoredManager = await SessionManager.open(sessionFile);
+				logger.info(`[bot-session] Restored global session from ${sessionFile}`);
+			}
+		} catch (err) {
+			logger.warn(`[bot-session] Session restore failed: ${err} — creating new session`);
+		}
+	}
+
+	logger.info(`[bot-session] Creating global session (restored=${!!restoredManager})`);
 	const prevProjectDir = getProjectDir();
 	setProjectDir(workspaceDir);
 	try {
@@ -57,8 +74,18 @@ export async function ensureGlobalSession(): Promise<BotSession> {
 				return [override ?? botPrompt];
 			},
 		};
+		if (restoredManager) {
+			(sessionOpts as any).sessionManager = restoredManager;
+		}
 		const { createAgentSession } = await import("../sdk");
 		const result = await createAgentSession(sessionOpts);
+
+		// Save the session file path for future recovery
+		try {
+			const sessionFile = result.session.sessionFile;
+			if (sessionFile) writeFileSync(recoveryPath, String(sessionFile), "utf-8");
+		} catch {}
+
 		globalSession = {
 			sessionKey: "zero",
 			config: { targetType: "private", targetId: 0, userName: "Global" },
