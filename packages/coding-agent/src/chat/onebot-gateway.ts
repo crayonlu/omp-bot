@@ -154,16 +154,16 @@ export class OneBotGateway {
 		try {
 			const msg = JSON.parse(data);
 
-			// API response: echo + status fields
-			if (msg.echo !== undefined && msg.status !== undefined) {
+			// API response: echo matching (NapCat may use retcode without status)
+			if (msg.echo !== undefined && (msg.status !== undefined || msg.retcode !== undefined)) {
 				const pending = this.pendingEchoes.get(msg.echo);
 				if (pending) {
-					if (msg.status === "ok" || msg.retcode === 0) {
+					if (msg.retcode === 0 || msg.status === "ok") {
 						pending.resolve(msg.data);
 					} else {
 						pending.reject(
 							new Error(
-								`[onebot] API error: ${msg.status} retcode=${msg.retcode} echo=${msg.echo}`
+								`[onebot] API error: ${msg.status ?? "?"} retcode=${msg.retcode ?? "?"} echo=${msg.echo}`
 							)
 						);
 					}
