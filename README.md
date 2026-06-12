@@ -1,9 +1,6 @@
 <p align="center">
-  <img src="https://github.com/can1357/oh-my-pi/blob/main/assets/hero.png?raw=true" alt="omp-bot">
-</p>
-
-<p align="center">
-  <strong>Zero (零)</strong> — QQ bot powered by <a href="https://github.com/can1357/oh-my-pi">oh-my-pi</a>.
+  <strong>Zero (零)</strong> — QQ bot powered by
+  <a href="https://github.com/can1357/oh-my-pi">oh-my-pi</a>.
 </p>
 
 <p align="center">
