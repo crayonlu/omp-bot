@@ -44,7 +44,7 @@ export async function ensureGlobalSession(): Promise<BotSession> {
 	mkdirSync(workspaceDir, { recursive: true });
 
 	// Try to restore previous session from saved file path
-	const recoveryPath = "/data/last-session-zero.path";
+	const recoveryPath = resolve(process.env.HOME || "/root", ".omp", "last-session-zero.path");
 	let restoredManager: SessionManager | undefined;
 	if (existsSync(recoveryPath)) {
 		try {
@@ -105,7 +105,7 @@ export function saveSessionFilePath(): void {
 		const sessionFile = globalSession.session.sessionFile;
 		logger.info(`[bot-session] saveSessionFilePath: sessionFile=${sessionFile}`);
 		if (sessionFile) {
-			writeFileSync("/data/last-session-zero.path", String(sessionFile), "utf-8");
+			writeFileSync(resolve(process.env.HOME || "/root", ".omp", "last-session-zero.path"), String(sessionFile), "utf-8");
 			logger.info(`[bot-session] Saved session file: ${sessionFile}`);
 		}
 	} catch (err) {
